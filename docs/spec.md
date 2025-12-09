@@ -7,9 +7,9 @@ Sổ Hụi – Mobile App (Flutter Project Specification)
 
 Flutter ≥ 3.22
 
-Kiến trúc: Clean Architecture hoặc MVVM (Copilot chọn nhưng phải thống nhất toàn dự án)
+Kiến trúc: MVVM 
 
-State management: Riverpod hoặc Bloc (Copilot chọn 1)
+State management: Riverpod 
 
 Database local: Drift (sqlite ORM)
 
