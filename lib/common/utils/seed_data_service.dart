@@ -83,17 +83,12 @@ class SeedDataService {
       ));
 
       // Create winner with bid amount using correct calculation
+      // Payout = (base - bid) × (N - 1) where N is total members (constant)
       final bidAmount = 800000.0 - (i * 100000); // 800k, 700k
-      final membersAlreadyWon = i; // Number of members who won before this period
-      final membersNotYetWon = interestHui.numMembers - membersAlreadyWon;
-      
-      final discounted = calcService.calculateDiscountedPayment(
+      final amountReceived = calcService.calculateWinnerPayout(
         interestHui.contributionAmount,
         bidAmount,
-      );
-      final amountReceived = calcService.calculateWinnerPayout(
-        discounted,
-        membersNotYetWon,
+        interestHui.numMembers,
       );
 
       await contributionRepo.createWinner(WinnerModel(

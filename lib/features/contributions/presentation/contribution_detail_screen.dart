@@ -103,31 +103,12 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             _bidAmountController.text.trim().isNotEmpty) {
           final bidAmount = double.parse(_bidAmountController.text);
           
-          // Get all contributions for this hui to count how many members already won
-          final allContributions = await contributionRepo.getContributionsByHuiGroup(hui.id!);
-          int membersAlreadyWon = 0;
-          
-          // Count winners before this period
-          for (final contrib in allContributions) {
-            if (contrib.periodNumber < contribution.periodNumber && contrib.id != null) {
-              final existingWinner = await contributionRepo.getWinnerByContribution(contrib.id!);
-              if (existingWinner != null) {
-                membersAlreadyWon++;
-              }
-            }
-          }
-          
-          // Calculate members who haven't won yet (including this winner)
-          final membersNotYetWon = hui.numMembers - membersAlreadyWon;
-          
-          // Calculate discounted payment and payout
-          final discounted = calcService.calculateDiscountedPayment(
+          // Calculate payout using correct formula: (base - bid) × (N - 1)
+          // N is total members (constant)
+          final amountReceived = calcService.calculateWinnerPayout(
             hui.contributionAmount,
             bidAmount,
-          );
-          final amountReceived = calcService.calculateWinnerPayout(
-            discounted,
-            membersNotYetWon,
+            hui.numMembers,
           );
 
           final winner = WinnerModel(
@@ -367,27 +348,29 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                                     }
                                     
                                     final membersAlreadyWon = snapshot.data!;
-                                    final membersNotYetWon = hui.numMembers - membersAlreadyWon;
+                                    final membersNotYetWonExcludingWinner = hui.numMembers - 1 - membersAlreadyWon;
                                     final calcService = ref.read(huiCalculationServiceProvider);
                                     final bidAmount = double.tryParse(_bidAmountController.text) ?? 0;
                                     final discounted = calcService.calculateDiscountedPayment(
                                       hui.contributionAmount,
                                       bidAmount,
                                     );
+                                    // Payout uses constant N-1 (total members - 1)
                                     final payout = calcService.calculateWinnerPayout(
-                                      discounted,
-                                      membersNotYetWon,
+                                      hui.contributionAmount,
+                                      bidAmount,
+                                      hui.numMembers,
                                     );
                                     final totalCollected = calcService.calculatePeriodTotalCollected(
                                       hui.contributionAmount,
                                       bidAmount,
-                                      membersNotYetWon,
                                       membersAlreadyWon,
+                                      membersNotYetWonExcludingWinner,
                                     );
                                     final periodSurplus = calcService.calculatePeriodSurplus(
                                       hui.contributionAmount,
                                       bidAmount,
-                                      membersNotYetWon,
+                                      hui.numMembers,
                                       membersAlreadyWon,
                                     );
 
@@ -395,12 +378,17 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text('Đã hốt trước: $membersAlreadyWon người'),
-                                        Text('Chưa hốt: $membersNotYetWon người'),
+                                        Text('Chưa hốt (không tính người hốt): $membersNotYetWonExcludingWinner người'),
+                                        Text('Người hốt trả: 0 (không đóng)'),
                                         const Divider(),
                                         Text('Tiền bỏ: ${CurrencyFormatter.formatCurrency(bidAmount)}'),
                                         Text('Thanh toán giảm giá: ${CurrencyFormatter.formatCurrency(discounted)}'),
                                         Text('Tổng thu kỳ này: ${CurrencyFormatter.formatCurrency(totalCollected)}'),
                                         const Divider(),
+                                        Text(
+                                          'Người hốt nhận = (${CurrencyFormatter.formatCurrency(hui.contributionAmount)} - ${CurrencyFormatter.formatCurrency(bidAmount)}) × ${hui.numMembers - 1}',
+                                          style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                                        ),
                                         Text(
                                           'Người hốt nhận: ${CurrencyFormatter.formatCurrency(payout)}',
                                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),

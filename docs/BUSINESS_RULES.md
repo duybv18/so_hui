@@ -59,12 +59,13 @@ Tổng mỗi người nhận: 10tr
 ## 2. Hụi Sống (Auction-based ROSCA)
 
 ### Đặc điểm
-- Mỗi kỳ, tất cả thành viên góp số tiền
+- Mỗi kỳ, tất cả thành viên góp số tiền (trừ người hốt)
 - Người muốn hốt phải "ra giá" - đấu giá bằng cách chấp nhận bỏ một số tiền (tiền bỏ / bid amount)
 - Ai chấp nhận bỏ ra nhiều tiền nhất (giảm giá nhiều nhất) thì được hốt
-- **Người chưa hốt (U)** trả: `baseContribution - bidAmount` (giảm giá)
+- **Người hốt trả: 0 VNĐ** (không đóng trong kỳ hốt của mình)
+- **Người chưa hốt (U, không tính người hốt)** trả: `baseContribution - bidAmount` (giảm giá)
 - **Người đã hốt (H)** trả: `baseContribution` (đầy đủ)
-- Người hốt nhận: `discounted × (|U| - 1)`
+- **Người hốt nhận**: `(base - bid) × (N - 1)` - N là tổng số thành viên (CONSTANT)
 - Tiền dư mỗi kỳ = tổng thu - tiền trả cho người hốt
 - Mỗi người chỉ được hốt đúng 1 lần trong suốt dây hụi
 - Người cuối cùng hốt tự động với tiền bỏ = 0
@@ -73,22 +74,25 @@ Tổng mỗi người nhận: 10tr
 
 ```dart
 // Các biến
+N = tổng số thành viên (constant)
 baseContribution = mệnh giá góp mỗi kỳ
 bidAmount = tiền bỏ (số tiền người hốt chấp nhận bỏ ra)
-U = số người chưa hốt
+U = số người chưa hốt (không tính người hốt kỳ này)
 H = số người đã hốt
 
-// Thanh toán giảm giá (cho người chưa hốt)
+// Thanh toán
+// Người hốt: trả 0
+// Người chưa hốt (U): trả discounted
 discounted = baseContribution - bidAmount
 
-// Thanh toán đầy đủ (cho người đã hốt)
+// Người đã hốt (H): trả full
 full = baseContribution
 
-// Tổng thu kỳ này
-totalCollected = (discounted × |U|) + (full × |H|)
+// Tổng thu kỳ này (người hốt không đóng)
+totalCollected = (full × |H|) + (discounted × |U|)
 
-// Người hốt nhận
-payout = discounted × (|U| - 1)
+// Người hốt nhận - CONSTANT multiplier (N-1)
+payout = (base - bid) × (N - 1)
 
 // Tiền dư kỳ này
 periodSurplus = totalCollected - payout
@@ -102,41 +106,47 @@ totalSurplus = Σ(periodSurplus for all periods)
 ```
 🔵 Kỳ 1 (Người A hốt, bỏ 300k)
 H = {} (chưa ai hốt trước)
-U = {A, B, C, D, E, F, G, H, I, J} (10 người)
+U = 9 người (B,C,D,E,F,G,H,I,J - không tính A vì A đang hốt)
 
-Thanh toán giảm giá: 2,000,000 - 300,000 = 1,700,000
-Tổng thu: 1,700,000 × 10 = 17,000,000
+A trả: 0 (người hốt không đóng)
+9 người U trả: 2,000,000 - 300,000 = 1,700,000
+Tổng thu: 9 × 1,700,000 = 15,300,000
 Người A nhận: 1,700,000 × (10-1) = 15,300,000
-Dư kỳ 1: 17,000,000 - 15,300,000 = 1,700,000
+Dư kỳ 1: 15,300,000 - 15,300,000 = 0
 
 🔵 Kỳ 2 (Người B hốt, bỏ 200k)
 H = {A} (A đã hốt)
-U = {B, C, D, E, F, G, H, I, J} (9 người)
+U = 8 người (C,D,E,F,G,H,I,J - không tính A, B)
 
+B trả: 0 (người hốt không đóng)
 A trả: 2,000,000 (đầy đủ)
-9 người U trả: 2,000,000 - 200,000 = 1,800,000
-Tổng thu: 2,000,000 + (1,800,000 × 9) = 18,200,000
-Người B nhận: 1,800,000 × (9-1) = 14,400,000
-Dư kỳ 2: 18,200,000 - 14,400,000 = 3,800,000
+8 người U trả: 2,000,000 - 200,000 = 1,800,000
+Tổng thu: 2,000,000 + (1,800,000 × 8) = 16,400,000
+Người B nhận: 1,800,000 × (10-1) = 16,200,000
+Dư kỳ 2: 16,400,000 - 16,200,000 = 200,000
 
 🔵 Kỳ 3 (Người C hốt, bỏ 100k)
-H = {A, B}
-U = {C, D, E, F, G, H, I, J} (8 người)
+H = {A, B} (A, B đã hốt)
+U = 7 người (D,E,F,G,H,I,J - không tính A, B, C)
 
+C trả: 0 (người hốt không đóng)
 A, B trả: 2,000,000 mỗi người = 4,000,000
-8 người U trả: 2,000,000 - 100,000 = 1,900,000
-Tổng thu: 4,000,000 + (1,900,000 × 8) = 19,200,000
-Người C nhận: 1,900,000 × (8-1) = 13,300,000
-Dư kỳ 3: 19,200,000 - 13,300,000 = 5,900,000
+7 người U trả: 2,000,000 - 100,000 = 1,900,000
+Tổng thu: 4,000,000 + (1,900,000 × 7) = 17,300,000
+Người C nhận: 1,900,000 × (10-1) = 17,100,000
+Dư kỳ 3: 17,300,000 - 17,100,000 = 200,000
 
 📊 Tổng tiền dư sau 3 kỳ:
-1,700,000 + 3,800,000 + 5,900,000 = 11,400,000
+0 + 200,000 + 200,000 = 400,000
 
 Lưu ý:
-- Người hốt sớm nhận ít hơn nhưng được hưởng giảm giá lâu hơn
-- Người hốt muộn nhận nhiều hơn nhưng phải trả đầy đủ nhiều kỳ hơn
-- Tiền dư tích luỹ là lợi nhuận của dây hụi
+- Người hốt KHÔNG đóng tiền trong kỳ hốt của mình
+- Công thức nhận = (base - bid) × (N - 1) với N-1 CONSTANT
+- Người hốt sớm nhận ít hơn nhưng không phải đóng sớm
+- Người hốt muộn nhận nhiều hơn nhưng phải đóng nhiều kỳ trước đó
+- Tiền dư tích luỹ từ chênh lệch thanh toán H vs U
 ```
+
 
 ### Trong ứng dụng
 
@@ -148,8 +158,13 @@ Lưu ý:
    - **Nhập tên người hốt**
    - **Nhập tiền bỏ (VNĐ)** - số tiền người hốt chấp nhận bỏ ra
    - App tự động tính và hiển thị:
-     - Số người đã hốt / chưa hốt
-     - Thanh toán giảm giá
+     - Số người đã hốt / chưa hốt (không tính người hốt)
+     - Người hốt trả: 0
+     - Thanh toán giảm giá cho người chưa hốt
+     - Tổng thu kỳ này
+     - Số tiền người hốt nhận = `(base - bid) × (N - 1)`
+     - Tiền dư kỳ này
+4. Báo cáo hiển thị tổng tiền dư tích luỹ từ tất cả các kỳ
      - Tổng thu kỳ này
      - Số tiền người hốt nhận = `discounted × (|U| - 1)`
      - Tiền dư kỳ này

@@ -43,7 +43,7 @@ class HuiCalculationService {
     return contributionAmount * numMembers;
   }
 
-  /// Calculate discounted payment for members who haven't won yet
+  /// Calculate discounted payment for members who haven't won yet (non-winners)
   /// discounted = baseContribution - bidAmount
   double calculateDiscountedPayment(
     double baseContribution,
@@ -53,27 +53,31 @@ class HuiCalculationService {
   }
 
   /// Calculate payout for winner in auction-based hui
-  /// payout = discounted × (|U| - 1)
-  /// where U is the count of members who haven't won yet
+  /// IMPORTANT: payout = (base - bid) × (N - 1)
+  /// where N is TOTAL members (constant), NOT variable
+  /// Winner pays 0 in their winning period
   double calculateWinnerPayout(
-    double discountedPayment,
-    int membersNotYetWon,
+    double baseContribution,
+    double bidAmount,
+    int totalMembers,
   ) {
-    return discountedPayment * (membersNotYetWon - 1);
+    final discounted = calculateDiscountedPayment(baseContribution, bidAmount);
+    return discounted * (totalMembers - 1);
   }
 
   /// Calculate total collected in a period for auction-based hui
-  /// totalCollected = (discounted × |U|) + (full × |H|)
-  /// where U = members who haven't won, H = members who already won
+  /// Winner pays 0
+  /// totalCollected = full × |H| + discounted × (|U| - 1)
+  /// where H = members who already won, U = members not yet won (excluding current winner)
   double calculatePeriodTotalCollected(
     double baseContribution,
     double bidAmount,
-    int membersNotYetWon,
     int membersAlreadyWon,
+    int membersNotYetWonExcludingWinner,
   ) {
     final discounted = calculateDiscountedPayment(baseContribution, bidAmount);
     final fullPayments = baseContribution * membersAlreadyWon;
-    final discountedPayments = discounted * membersNotYetWon;
+    final discountedPayments = discounted * membersNotYetWonExcludingWinner;
     return fullPayments + discountedPayments;
   }
 
@@ -82,17 +86,26 @@ class HuiCalculationService {
   double calculatePeriodSurplus(
     double baseContribution,
     double bidAmount,
-    int membersNotYetWon,
+    int totalMembers,
     int membersAlreadyWon,
   ) {
+    // Winner pays 0, so non-winner contributors = totalMembers - 1
+    // Of those, membersAlreadyWon pay full, rest pay discounted
+    final membersNotYetWonExcludingWinner = totalMembers - 1 - membersAlreadyWon;
+    
     final totalCollected = calculatePeriodTotalCollected(
       baseContribution,
       bidAmount,
-      membersNotYetWon,
       membersAlreadyWon,
+      membersNotYetWonExcludingWinner,
     );
-    final discounted = calculateDiscountedPayment(baseContribution, bidAmount);
-    final payout = calculateWinnerPayout(discounted, membersNotYetWon);
+    
+    final payout = calculateWinnerPayout(
+      baseContribution,
+      bidAmount,
+      totalMembers,
+    );
+    
     return totalCollected - payout;
   }
 
@@ -108,12 +121,11 @@ class HuiCalculationService {
     for (int i = 0; i < winners.length; i++) {
       final winner = winners[i];
       final membersAlreadyWon = i; // Members who won in previous periods
-      final membersNotYetWon = totalMembers - membersAlreadyWon;
       
       final periodSurplus = calculatePeriodSurplus(
         baseContribution,
         winner.bidAmount,
-        membersNotYetWon,
+        totalMembers,
         membersAlreadyWon,
       );
       
