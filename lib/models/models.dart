@@ -198,7 +198,7 @@ class WinnerModel {
   WinnerModel copyWith({
     int? id,
     int? contributionId,
-    String winnerName,
+    String? winnerName,
     double? interestRate,
     double? amountReceived,
     DateTime? createdAt,
