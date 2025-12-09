@@ -56,14 +56,16 @@ Tổng mỗi người nhận: 10tr
    - Thêm ghi chú nếu cần
 4. Không cần nhập thông tin người hốt hoặc lãi suất
 
-## 2. Hụi Sống (Interest-based ROSCA)
+## 2. Hụi Sống (Auction-based ROSCA)
 
 ### Đặc điểm
-- Mỗi kỳ, người muốn hốt phải "ra giá" (đấu giá)
-- Ai trả mức lãi cao hơn thì được hốt kỳ đó
-- Số tiền nhận được = tổng góp - phần lãi
-- Lãi được chia cho các thành viên còn lại
-- Người hốt càng sớm thường chịu lãi cao hơn
+- Mỗi kỳ, tất cả thành viên góp số tiền cố định
+- Người muốn hốt phải "ra giá" - đấu giá bằng cách chấp nhận bỏ một số tiền (tiền bỏ / bid amount)
+- Ai chấp nhận bỏ ra nhiều tiền nhất (giảm giá nhiều nhất) thì được hốt
+- Số tiền nhận được = tổng góp - tiền bỏ
+- Tiền bỏ KHÔNG được chia cho các thành viên khác - nó trở thành tiền dư của dây hụi
+- Mỗi người chỉ được hốt đúng 1 lần trong suốt dây hụi
+- Người cuối cùng hốt tự động với tiền bỏ = 0 (nhận đủ tổng góp)
 
 ### Công thức tính toán
 
@@ -71,17 +73,14 @@ Tổng mỗi người nhận: 10tr
 // Tổng góp mỗi kỳ
 totalContribution = contributionAmount × numMembers
 
-// Tiền lãi
-interestAmount = totalContribution × interestRate
+// Tiền bỏ (bid amount)
+bidAmount = số tiền người hốt chấp nhận bỏ ra
 
 // Người hốt nhận
-amountReceived = totalContribution - interestAmount
+amountReceived = totalContribution - bidAmount
 
-// Lãi chia cho mỗi người còn lại
-interestPerPerson = interestAmount / (numMembers - 1)
-
-// Tổng lãi tích luỹ (cho dây)
-accumulatedInterest = Σ(interestAmount) for all winners
+// Tiền dư cuối dây (surplus)
+cumulativeSurplus = Σ(bidAmount) for all winners
 ```
 
 ### Ví dụ
@@ -93,21 +92,27 @@ Tần suất: Hàng tháng
 
 Kỳ 1: 
 - 10 người góp 1tr = 10tr tổng
-- Người A hốt với lãi 5% (500k)
-- A nhận: 10tr - 500k = 9.5tr
-- 9 người còn lại mỗi người được chia: 500k / 9 ≈ 55.5k
+- Người A đấu giá, chấp nhận bỏ 800k
+- A nhận: 10tr - 800k = 9.2tr
+- 800k không chia cho ai, trở thành tiền dư của dây
 
 Kỳ 2:
 - 10 người góp 1tr = 10tr tổng
-- Người B hốt với lãi 4% (400k)
-- B nhận: 10tr - 400k = 9.6tr
-- 9 người còn lại mỗi người được chia: 400k / 9 ≈ 44.4k
+- Người B đấu giá, chấp nhận bỏ 600k
+- B nhận: 10tr - 600k = 9.4tr
+- 600k cộng vào tiền dư (tổng dư = 800k + 600k = 1.4tr)
 
 ...
 
-Kỳ cuối:
-- Thường không có lãi hoặc lãi thấp
-- Người cuối cùng nhận gần bằng tổng góp
+Kỳ 10 (cuối):
+- 10 người góp 1tr = 10tr tổng
+- Người J là người cuối, tự động hốt với tiền bỏ = 0
+- J nhận: 10tr - 0 = 10tr (đủ)
+- Tiền dư cuối dây = tổng tất cả tiền bỏ = 800k + 600k + ... 
+
+Tổng mỗi người góp: 10tr
+Mỗi người nhận: khác nhau tùy kỳ hốt
+Tiền dư cuối dây: là lợi nhuận của dây hụi
 ```
 
 ### Trong ứng dụng
@@ -118,12 +123,12 @@ Kỳ cuối:
    - Đánh dấu đã góp
    - Nhập số tiền thực góp
    - **Nhập tên người hốt**
-   - **Nhập lãi suất (%)** 
+   - **Nhập tiền bỏ (VNĐ)** - số tiền người hốt chấp nhận bỏ ra
    - App tự động tính và hiển thị:
      - Tổng góp
-     - Tiền lãi
-     - Số tiền người hốt nhận
-4. Báo cáo hiển thị tổng lãi tích luỹ
+     - Tiền bỏ
+     - Số tiền người hốt nhận = Tổng góp - Tiền bỏ
+4. Báo cáo hiển thị tổng tiền dư tích luỹ (cumulative surplus)
 
 ## 3. Sinh Kỳ Góp Tự Động
 
@@ -196,8 +201,13 @@ DateTime calculateProjectedEndDate(HuiGroup hui) {
 
 ### Khi cập nhật kỳ góp:
 - Số tiền thực góp: >= 0 (có thể khác mệnh giá)
-- Lãi suất (hụi sống): 0-100%
-- Tên người hốt (hụi sống): Không rỗng nếu có lãi
+- Tiền bỏ (hụi sống): >= 0, <= tổng góp
+- Tên người hốt (hụi sống): Không rỗng nếu có người hốt
+
+### Quy tắc đấu giá (hụi sống):
+- Mỗi thành viên chỉ được hốt đúng 1 lần
+- Kỳ cuối cùng: người còn lại tự động hốt với tiền bỏ = 0
+- Tiền bỏ không được vượt quá tổng góp của kỳ
 
 ## 8. Xử Lý Edge Cases
 
@@ -213,9 +223,14 @@ DateTime calculateProjectedEndDate(HuiGroup hui) {
 - Cho phép nhập số tiền thực góp khác mệnh giá
 - Tính toán dựa trên số tiền thực tế
 
-### Kỳ hốt không có lãi
-- Với hụi sống, cho phép lãi = 0%
-- Người hốt nhận đúng tổng góp
+### Người hốt lần 2
+- Với hụi sống, mỗi người chỉ được hốt 1 lần
+- App nên theo dõi danh sách người đã hốt
+- Cảnh báo nếu nhập tên người đã hốt trước đó
+
+### Kỳ cuối cùng
+- Với hụi sống, kỳ cuối tự động tiền bỏ = 0
+- Người cuối nhận đủ tổng góp
 
 ## 9. Báo Cáo & Analytics
 

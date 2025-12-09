@@ -82,21 +82,21 @@ class SeedDataService {
         notes: 'Đã đóng và có người hốt',
       ));
 
-      // Create winner
-      final interestRate = 0.05 - (i * 0.01); // 5%, 4%
-      final totalContribution = calcService.calculateTotalForFixedHui(
+      // Create winner with bid amount
+      final bidAmount = 800000.0 - (i * 100000); // 800k, 700k
+      final totalContribution = calcService.calculateTotalContribution(
         interestHui.contributionAmount,
         interestHui.numMembers,
       );
-      final amountReceived = calcService.calculateAmountReceivedWithInterest(
+      final amountReceived = calcService.calculateAmountReceivedWithBid(
         totalContribution,
-        interestRate,
+        bidAmount,
       );
 
       await contributionRepo.createWinner(WinnerModel(
         contributionId: contributionId,
         winnerName: 'Người ${i + 1}',
-        interestRate: interestRate,
+        bidAmount: bidAmount,
         amountReceived: amountReceived,
       ));
     }

@@ -46,7 +46,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
   final _amountController = TextEditingController();
   final _notesController = TextEditingController();
   final _winnerNameController = TextEditingController();
-  final _interestRateController = TextEditingController();
+  final _bidAmountController = TextEditingController(); // Changed from _interestRateController
   bool _isPaid = false;
   bool _isLoading = false;
 
@@ -55,7 +55,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
     _amountController.dispose();
     _notesController.dispose();
     _winnerNameController.dispose();
-    _interestRateController.dispose();
+    _bidAmountController.dispose();
     super.dispose();
   }
 
@@ -80,24 +80,24 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
 
       await contributionRepo.updateContribution(updatedContribution);
 
-      // Handle winner for interest-based hui
+      // Handle winner for auction-based hui
       if (hui.type == HuiType.interest && _isPaid) {
         if (_winnerNameController.text.trim().isNotEmpty &&
-            _interestRateController.text.trim().isNotEmpty) {
-          final interestRate = double.parse(_interestRateController.text) / 100;
-          final totalContribution = calcService.calculateTotalForFixedHui(
+            _bidAmountController.text.trim().isNotEmpty) {
+          final bidAmount = double.parse(_bidAmountController.text);
+          final totalContribution = calcService.calculateTotalContribution(
             hui.contributionAmount,
             hui.numMembers,
           );
-          final amountReceived = calcService.calculateAmountReceivedWithInterest(
+          final amountReceived = calcService.calculateAmountReceivedWithBid(
             totalContribution,
-            interestRate,
+            bidAmount,
           );
 
           final winner = WinnerModel(
             contributionId: contribution.id!,
             winnerName: _winnerNameController.text.trim(),
-            interestRate: interestRate,
+            bidAmount: bidAmount,
             amountReceived: amountReceived,
           );
 
@@ -153,7 +153,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
 
             if (winner != null) {
               _winnerNameController.text = winner.winnerName;
-              _interestRateController.text = (winner.interestRate * 100).toString();
+              _bidAmountController.text = winner.bidAmount.toString();
             }
           }
 
@@ -283,7 +283,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Thông tin hốt (Hụi sống)',
+                          'Thông tin đấu giá (Hụi sống)',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -298,18 +298,16 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
-                          controller: _interestRateController,
+                          controller: _bidAmountController,
                           decoration: const InputDecoration(
-                            labelText: 'Lãi suất (%)',
-                            hintText: 'VD: 5',
-                            suffixText: '%',
+                            labelText: 'Tiền bỏ (VNĐ)',
+                            hintText: 'VD: 500000',
+                            helperText: 'Số tiền người hốt chấp nhận bỏ ra (giảm giá)',
                           ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                          ],
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         ),
-                        if (_interestRateController.text.isNotEmpty) ...[
+                        if (_bidAmountController.text.isNotEmpty) ...[
                           const SizedBox(height: 16),
                           Container(
                             padding: const EdgeInsets.all(12),
@@ -328,22 +326,21 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                                 Builder(
                                   builder: (context) {
                                     final calcService = ref.read(huiCalculationServiceProvider);
-                                    final totalContribution = calcService.calculateTotalForFixedHui(
+                                    final totalContribution = calcService.calculateTotalContribution(
                                       hui.contributionAmount,
                                       hui.numMembers,
                                     );
-                                    final interestRate = double.tryParse(_interestRateController.text) ?? 0;
-                                    final amountReceived = calcService.calculateAmountReceivedWithInterest(
+                                    final bidAmount = double.tryParse(_bidAmountController.text) ?? 0;
+                                    final amountReceived = calcService.calculateAmountReceivedWithBid(
                                       totalContribution,
-                                      interestRate / 100,
+                                      bidAmount,
                                     );
-                                    final interestAmount = totalContribution - amountReceived;
 
                                     return Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text('Tổng góp: ${CurrencyFormatter.formatCurrency(totalContribution)}'),
-                                        Text('Tiền lãi: ${CurrencyFormatter.formatCurrency(interestAmount)}'),
+                                        Text('Tiền bỏ: ${CurrencyFormatter.formatCurrency(bidAmount)}'),
                                         Text(
                                           'Người hốt nhận: ${CurrencyFormatter.formatCurrency(amountReceived)}',
                                           style: const TextStyle(fontWeight: FontWeight.bold),

@@ -38,17 +38,24 @@ class HuiCalculationService {
     return contributions;
   }
 
-  /// Calculate total amount for fixed-type hui
-  double calculateTotalForFixedHui(double contributionAmount, int numMembers) {
+  /// Calculate total amount for fixed-type hui or auction hui
+  double calculateTotalContribution(double contributionAmount, int numMembers) {
     return contributionAmount * numMembers;
   }
 
-  /// Calculate amount received for interest-based hui
-  double calculateAmountReceivedWithInterest(
+  /// Calculate amount received for auction-based hui
+  /// bidAmount is the discount the winner accepts (tiền bỏ)
+  double calculateAmountReceivedWithBid(
     double totalContribution,
-    double interestRate,
+    double bidAmount,
   ) {
-    return totalContribution - (totalContribution * interestRate);
+    return totalContribution - bidAmount;
+  }
+
+  /// Calculate cumulative surplus (total of all bids) for auction hui
+  /// This is the final surplus of the hui pot (tiền dư cuối dây)
+  double calculateCumulativeSurplus(List<WinnerModel> winners) {
+    return winners.fold(0.0, (sum, winner) => sum + winner.bidAmount);
   }
 
   /// Calculate total paid by user so far
@@ -90,10 +97,7 @@ class HuiCalculationService {
 
   /// Calculate accumulated interest for interest-based hui
   double calculateAccumulatedInterest(List<WinnerModel> winners) {
-    return winners.fold(0.0, (sum, winner) {
-      // Interest = total contribution - amount received
-      // We need to calculate this based on contribution amount and members
-      return sum;
-    });
+    // This is now the cumulative surplus (tiền dư)
+    return calculateCumulativeSurplus(winners);
   }
 }

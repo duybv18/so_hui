@@ -162,15 +162,15 @@ class WinnerModel {
   final int? id;
   final int contributionId;
   final String winnerName;
-  final double interestRate;
-  final double amountReceived;
+  final double bidAmount; // The discount amount winner bids (tiền bỏ)
+  final double amountReceived; // totalContribution - bidAmount
   final DateTime? createdAt;
 
   WinnerModel({
     this.id,
     required this.contributionId,
     required this.winnerName,
-    required this.interestRate,
+    required this.bidAmount,
     required this.amountReceived,
     this.createdAt,
   });
@@ -180,7 +180,7 @@ class WinnerModel {
       id: entity.id,
       contributionId: entity.contributionId,
       winnerName: entity.winnerName,
-      interestRate: entity.interestRate,
+      bidAmount: entity.bidAmount,
       amountReceived: entity.amountReceived,
       createdAt: entity.createdAt,
     );
@@ -190,7 +190,7 @@ class WinnerModel {
     return HuiWinnersCompanion.insert(
       contributionId: contributionId,
       winnerName: winnerName,
-      interestRate: interestRate,
+      bidAmount: bidAmount,
       amountReceived: amountReceived,
     );
   }
@@ -199,7 +199,7 @@ class WinnerModel {
     int? id,
     int? contributionId,
     String? winnerName,
-    double? interestRate,
+    double? bidAmount,
     double? amountReceived,
     DateTime? createdAt,
   }) {
@@ -207,7 +207,7 @@ class WinnerModel {
       id: id ?? this.id,
       contributionId: contributionId ?? this.contributionId,
       winnerName: winnerName ?? this.winnerName,
-      interestRate: interestRate ?? this.interestRate,
+      bidAmount: bidAmount ?? this.bidAmount,
       amountReceived: amountReceived ?? this.amountReceived,
       createdAt: createdAt ?? this.createdAt,
     );

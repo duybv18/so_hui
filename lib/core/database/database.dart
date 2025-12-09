@@ -47,13 +47,13 @@ class Contributions extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-// Table: Hui Winners (for interest-based hui)
+// Table: Hui Winners (for auction-based hui)
 class HuiWinners extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get contributionId => integer().references(Contributions, #id, onDelete: KeyAction.cascade)();
   TextColumn get winnerName => text().withLength(min: 1, max: 100)();
-  RealColumn get interestRate => real()(); // percentage (0.0 - 1.0)
-  RealColumn get amountReceived => real()();
+  RealColumn get bidAmount => real()(); // The discount amount winner bids (tiền bỏ)
+  RealColumn get amountReceived => real()(); // totalContribution - bidAmount
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

@@ -34,14 +34,34 @@ void main() {
       expect(total, 10000000);
     });
 
-    test('Calculate amount received with interest', () {
+    test('Calculate amount received with bid', () {
       final totalContribution = 10000000.0;
-      final interestRate = 0.05; // 5%
-      final amountReceived = service.calculateAmountReceivedWithInterest(
+      final bidAmount = 500000.0; // 500k bid
+      final amountReceived = service.calculateAmountReceivedWithBid(
         totalContribution,
-        interestRate,
+        bidAmount,
       );
       expect(amountReceived, 9500000);
+    });
+
+    test('Calculate cumulative surplus from bids', () {
+      final winners = [
+        WinnerModel(
+          contributionId: 1,
+          winnerName: 'Person 1',
+          bidAmount: 500000,
+          amountReceived: 9500000,
+        ),
+        WinnerModel(
+          contributionId: 2,
+          winnerName: 'Person 2',
+          bidAmount: 300000,
+          amountReceived: 9700000,
+        ),
+      ];
+
+      final surplus = service.calculateCumulativeSurplus(winners);
+      expect(surplus, 800000); // 500k + 300k
     });
 
     test('Calculate total paid', () {
