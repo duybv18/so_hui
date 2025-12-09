@@ -163,7 +163,7 @@ class WinnerModel {
   final int contributionId;
   final String winnerName;
   final double bidAmount; // The discount amount winner bids (tiền bỏ)
-  final double amountReceived; // totalContribution - bidAmount
+  final double amountReceived; // payout = discounted × (|U| - 1)
   final DateTime? createdAt;
 
   WinnerModel({

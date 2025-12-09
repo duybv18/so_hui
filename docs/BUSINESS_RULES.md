@@ -59,60 +59,83 @@ Tổng mỗi người nhận: 10tr
 ## 2. Hụi Sống (Auction-based ROSCA)
 
 ### Đặc điểm
-- Mỗi kỳ, tất cả thành viên góp số tiền cố định
+- Mỗi kỳ, tất cả thành viên góp số tiền
 - Người muốn hốt phải "ra giá" - đấu giá bằng cách chấp nhận bỏ một số tiền (tiền bỏ / bid amount)
 - Ai chấp nhận bỏ ra nhiều tiền nhất (giảm giá nhiều nhất) thì được hốt
-- Số tiền nhận được = tổng góp - tiền bỏ
-- Tiền bỏ KHÔNG được chia cho các thành viên khác - nó trở thành tiền dư của dây hụi
+- **Người chưa hốt (U)** trả: `baseContribution - bidAmount` (giảm giá)
+- **Người đã hốt (H)** trả: `baseContribution` (đầy đủ)
+- Người hốt nhận: `discounted × (|U| - 1)`
+- Tiền dư mỗi kỳ = tổng thu - tiền trả cho người hốt
 - Mỗi người chỉ được hốt đúng 1 lần trong suốt dây hụi
-- Người cuối cùng hốt tự động với tiền bỏ = 0 (nhận đủ tổng góp)
+- Người cuối cùng hốt tự động với tiền bỏ = 0
 
 ### Công thức tính toán
 
 ```dart
-// Tổng góp mỗi kỳ
-totalContribution = contributionAmount × numMembers
+// Các biến
+baseContribution = mệnh giá góp mỗi kỳ
+bidAmount = tiền bỏ (số tiền người hốt chấp nhận bỏ ra)
+U = số người chưa hốt
+H = số người đã hốt
 
-// Tiền bỏ (bid amount)
-bidAmount = số tiền người hốt chấp nhận bỏ ra
+// Thanh toán giảm giá (cho người chưa hốt)
+discounted = baseContribution - bidAmount
+
+// Thanh toán đầy đủ (cho người đã hốt)
+full = baseContribution
+
+// Tổng thu kỳ này
+totalCollected = (discounted × |U|) + (full × |H|)
 
 // Người hốt nhận
-amountReceived = totalContribution - bidAmount
+payout = discounted × (|U| - 1)
 
-// Tiền dư cuối dây (surplus)
-cumulativeSurplus = Σ(bidAmount) for all winners
+// Tiền dư kỳ này
+periodSurplus = totalCollected - payout
+
+// Tổng tiền dư cuối dây
+totalSurplus = Σ(periodSurplus for all periods)
 ```
 
-### Ví dụ
+### Ví dụ chi tiết (10 người, mệnh giá 2 triệu)
 
 ```
-Dây hụi: 10 người, mỗi kỳ góp 1 triệu
-Tổng số kỳ: 10
-Tần suất: Hàng tháng
+🔵 Kỳ 1 (Người A hốt, bỏ 300k)
+H = {} (chưa ai hốt trước)
+U = {A, B, C, D, E, F, G, H, I, J} (10 người)
 
-Kỳ 1: 
-- 10 người góp 1tr = 10tr tổng
-- Người A đấu giá, chấp nhận bỏ 800k
-- A nhận: 10tr - 800k = 9.2tr
-- 800k không chia cho ai, trở thành tiền dư của dây
+Thanh toán giảm giá: 2,000,000 - 300,000 = 1,700,000
+Tổng thu: 1,700,000 × 10 = 17,000,000
+Người A nhận: 1,700,000 × (10-1) = 15,300,000
+Dư kỳ 1: 17,000,000 - 15,300,000 = 1,700,000
 
-Kỳ 2:
-- 10 người góp 1tr = 10tr tổng
-- Người B đấu giá, chấp nhận bỏ 600k
-- B nhận: 10tr - 600k = 9.4tr
-- 600k cộng vào tiền dư (tổng dư = 800k + 600k = 1.4tr)
+🔵 Kỳ 2 (Người B hốt, bỏ 200k)
+H = {A} (A đã hốt)
+U = {B, C, D, E, F, G, H, I, J} (9 người)
 
-...
+A trả: 2,000,000 (đầy đủ)
+9 người U trả: 2,000,000 - 200,000 = 1,800,000
+Tổng thu: 2,000,000 + (1,800,000 × 9) = 18,200,000
+Người B nhận: 1,800,000 × (9-1) = 14,400,000
+Dư kỳ 2: 18,200,000 - 14,400,000 = 3,800,000
 
-Kỳ 10 (cuối):
-- 10 người góp 1tr = 10tr tổng
-- Người J là người cuối, tự động hốt với tiền bỏ = 0
-- J nhận: 10tr - 0 = 10tr (đủ)
-- Tiền dư cuối dây = tổng tất cả tiền bỏ = 800k + 600k + ... 
+🔵 Kỳ 3 (Người C hốt, bỏ 100k)
+H = {A, B}
+U = {C, D, E, F, G, H, I, J} (8 người)
 
-Tổng mỗi người góp: 10tr
-Mỗi người nhận: khác nhau tùy kỳ hốt
-Tiền dư cuối dây: là lợi nhuận của dây hụi
+A, B trả: 2,000,000 mỗi người = 4,000,000
+8 người U trả: 2,000,000 - 100,000 = 1,900,000
+Tổng thu: 4,000,000 + (1,900,000 × 8) = 19,200,000
+Người C nhận: 1,900,000 × (8-1) = 13,300,000
+Dư kỳ 3: 19,200,000 - 13,300,000 = 5,900,000
+
+📊 Tổng tiền dư sau 3 kỳ:
+1,700,000 + 3,800,000 + 5,900,000 = 11,400,000
+
+Lưu ý:
+- Người hốt sớm nhận ít hơn nhưng được hưởng giảm giá lâu hơn
+- Người hốt muộn nhận nhiều hơn nhưng phải trả đầy đủ nhiều kỳ hơn
+- Tiền dư tích luỹ là lợi nhuận của dây hụi
 ```
 
 ### Trong ứng dụng
@@ -125,9 +148,11 @@ Tiền dư cuối dây: là lợi nhuận của dây hụi
    - **Nhập tên người hốt**
    - **Nhập tiền bỏ (VNĐ)** - số tiền người hốt chấp nhận bỏ ra
    - App tự động tính và hiển thị:
-     - Tổng góp
-     - Tiền bỏ
-     - Số tiền người hốt nhận = Tổng góp - Tiền bỏ
+     - Số người đã hốt / chưa hốt
+     - Thanh toán giảm giá
+     - Tổng thu kỳ này
+     - Số tiền người hốt nhận = `discounted × (|U| - 1)`
+     - Tiền dư kỳ này
 4. Báo cáo hiển thị tổng tiền dư tích luỹ (cumulative surplus)
 
 ## 3. Sinh Kỳ Góp Tự Động

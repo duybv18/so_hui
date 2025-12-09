@@ -53,7 +53,7 @@ class HuiWinners extends Table {
   IntColumn get contributionId => integer().references(Contributions, #id, onDelete: KeyAction.cascade)();
   TextColumn get winnerName => text().withLength(min: 1, max: 100)();
   RealColumn get bidAmount => real()(); // The discount amount winner bids (tiền bỏ)
-  RealColumn get amountReceived => real()(); // totalContribution - bidAmount
+  RealColumn get amountReceived => real()(); // payout = discounted × (|U| - 1)
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 

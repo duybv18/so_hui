@@ -34,34 +34,94 @@ void main() {
       expect(total, 10000000);
     });
 
-    test('Calculate amount received with bid', () {
-      final totalContribution = 10000000.0;
-      final bidAmount = 500000.0; // 500k bid
-      final amountReceived = service.calculateAmountReceivedWithBid(
-        totalContribution,
-        bidAmount,
-      );
-      expect(amountReceived, 9500000);
+    test('Calculate discounted payment', () {
+      final baseContribution = 2000000.0;
+      final bidAmount = 300000.0;
+      final discounted = service.calculateDiscountedPayment(baseContribution, bidAmount);
+      expect(discounted, 1700000);
     });
 
-    test('Calculate cumulative surplus from bids', () {
+    test('Calculate winner payout', () {
+      final discounted = 1700000.0;
+      final membersNotYetWon = 10;
+      final payout = service.calculateWinnerPayout(discounted, membersNotYetWon);
+      // payout = discounted × (|U| - 1) = 1,700,000 × 9 = 15,300,000
+      expect(payout, 15300000);
+    });
+
+    test('Calculate period total collected', () {
+      final baseContribution = 2000000.0;
+      final bidAmount = 300000.0;
+      final membersNotYetWon = 10;
+      final membersAlreadyWon = 0;
+      
+      final totalCollected = service.calculatePeriodTotalCollected(
+        baseContribution,
+        bidAmount,
+        membersNotYetWon,
+        membersAlreadyWon,
+      );
+      // discounted = 2,000,000 - 300,000 = 1,700,000
+      // total = 1,700,000 × 10 = 17,000,000
+      expect(totalCollected, 17000000);
+    });
+
+    test('Calculate period surplus', () {
+      final baseContribution = 2000000.0;
+      final bidAmount = 300000.0;
+      final membersNotYetWon = 10;
+      final membersAlreadyWon = 0;
+      
+      final periodSurplus = service.calculatePeriodSurplus(
+        baseContribution,
+        bidAmount,
+        membersNotYetWon,
+        membersAlreadyWon,
+      );
+      // totalCollected = 17,000,000
+      // payout = 15,300,000
+      // surplus = 1,700,000
+      expect(periodSurplus, 1700000);
+    });
+
+    test('Calculate cumulative surplus from multiple periods', () {
+      // Simulating the example from requirements
+      final baseContribution = 2000000.0;
+      final totalMembers = 10;
+      
+      // Period 1: bid = 300k, H=0, U=10
       final winners = [
         WinnerModel(
           contributionId: 1,
-          winnerName: 'Person 1',
-          bidAmount: 500000,
-          amountReceived: 9500000,
+          winnerName: 'A',
+          bidAmount: 300000,
+          amountReceived: 15300000, // This will be calculated correctly
         ),
         WinnerModel(
           contributionId: 2,
-          winnerName: 'Person 2',
-          bidAmount: 300000,
-          amountReceived: 9700000,
+          winnerName: 'B',
+          bidAmount: 200000,
+          amountReceived: 14400000, // This will be calculated correctly
+        ),
+        WinnerModel(
+          contributionId: 3,
+          winnerName: 'C',
+          bidAmount: 100000,
+          amountReceived: 13300000, // This will be calculated correctly
         ),
       ];
-
-      final surplus = service.calculateCumulativeSurplus(winners);
-      expect(surplus, 800000); // 500k + 300k
+      
+      final cumulativeSurplus = service.calculateCumulativeSurplus(
+        baseContribution,
+        totalMembers,
+        winners,
+      );
+      
+      // Period 1: surplus = 1,700,000
+      // Period 2: surplus = 3,800,000
+      // Period 3: surplus = 5,900,000
+      // Total = 1,700,000 + 3,800,000 + 5,900,000 = 11,400,000
+      expect(cumulativeSurplus, 11400000);
     });
 
     test('Calculate total paid', () {

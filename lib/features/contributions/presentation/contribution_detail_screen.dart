@@ -59,6 +59,23 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
     super.dispose();
   }
 
+  Future<int> _getMembersAlreadyWon(int huiId, int currentPeriod) async {
+    final contributionRepo = ref.read(contributionRepositoryProvider);
+    final allContributions = await contributionRepo.getContributionsByHuiGroup(huiId);
+    
+    int count = 0;
+    for (final contrib in allContributions) {
+      if (contrib.periodNumber < currentPeriod && contrib.id != null) {
+        final winner = await contributionRepo.getWinnerByContribution(contrib.id!);
+        if (winner != null) {
+          count++;
+        }
+      }
+    }
+    
+    return count;
+  }
+
   Future<void> _saveContribution(HuiGroupModel hui, ContributionModel contribution) async {
     setState(() {
       _isLoading = true;
@@ -85,13 +102,32 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
         if (_winnerNameController.text.trim().isNotEmpty &&
             _bidAmountController.text.trim().isNotEmpty) {
           final bidAmount = double.parse(_bidAmountController.text);
-          final totalContribution = calcService.calculateTotalContribution(
+          
+          // Get all contributions for this hui to count how many members already won
+          final allContributions = await contributionRepo.getContributionsByHuiGroup(hui.id!);
+          int membersAlreadyWon = 0;
+          
+          // Count winners before this period
+          for (final contrib in allContributions) {
+            if (contrib.periodNumber < contribution.periodNumber && contrib.id != null) {
+              final existingWinner = await contributionRepo.getWinnerByContribution(contrib.id!);
+              if (existingWinner != null) {
+                membersAlreadyWon++;
+              }
+            }
+          }
+          
+          // Calculate members who haven't won yet (including this winner)
+          final membersNotYetWon = hui.numMembers - membersAlreadyWon;
+          
+          // Calculate discounted payment and payout
+          final discounted = calcService.calculateDiscountedPayment(
             hui.contributionAmount,
-            hui.numMembers,
-          );
-          final amountReceived = calcService.calculateAmountReceivedWithBid(
-            totalContribution,
             bidAmount,
+          );
+          final amountReceived = calcService.calculateWinnerPayout(
+            discounted,
+            membersNotYetWon,
           );
 
           final winner = WinnerModel(
@@ -323,27 +359,58 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                                   style: Theme.of(context).textTheme.labelLarge,
                                 ),
                                 const SizedBox(height: 8),
-                                Builder(
-                                  builder: (context) {
+                                FutureBuilder<int>(
+                                  future: _getMembersAlreadyWon(hui.id!, contribution.periodNumber),
+                                  builder: (context, snapshot) {
+                                    if (!snapshot.hasData) {
+                                      return const CircularProgressIndicator();
+                                    }
+                                    
+                                    final membersAlreadyWon = snapshot.data!;
+                                    final membersNotYetWon = hui.numMembers - membersAlreadyWon;
                                     final calcService = ref.read(huiCalculationServiceProvider);
-                                    final totalContribution = calcService.calculateTotalContribution(
-                                      hui.contributionAmount,
-                                      hui.numMembers,
-                                    );
                                     final bidAmount = double.tryParse(_bidAmountController.text) ?? 0;
-                                    final amountReceived = calcService.calculateAmountReceivedWithBid(
-                                      totalContribution,
+                                    final discounted = calcService.calculateDiscountedPayment(
+                                      hui.contributionAmount,
                                       bidAmount,
+                                    );
+                                    final payout = calcService.calculateWinnerPayout(
+                                      discounted,
+                                      membersNotYetWon,
+                                    );
+                                    final totalCollected = calcService.calculatePeriodTotalCollected(
+                                      hui.contributionAmount,
+                                      bidAmount,
+                                      membersNotYetWon,
+                                      membersAlreadyWon,
+                                    );
+                                    final periodSurplus = calcService.calculatePeriodSurplus(
+                                      hui.contributionAmount,
+                                      bidAmount,
+                                      membersNotYetWon,
+                                      membersAlreadyWon,
                                     );
 
                                     return Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text('Tổng góp: ${CurrencyFormatter.formatCurrency(totalContribution)}'),
+                                        Text('Đã hốt trước: $membersAlreadyWon người'),
+                                        Text('Chưa hốt: $membersNotYetWon người'),
+                                        const Divider(),
                                         Text('Tiền bỏ: ${CurrencyFormatter.formatCurrency(bidAmount)}'),
+                                        Text('Thanh toán giảm giá: ${CurrencyFormatter.formatCurrency(discounted)}'),
+                                        Text('Tổng thu kỳ này: ${CurrencyFormatter.formatCurrency(totalCollected)}'),
+                                        const Divider(),
                                         Text(
-                                          'Người hốt nhận: ${CurrencyFormatter.formatCurrency(amountReceived)}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                          'Người hốt nhận: ${CurrencyFormatter.formatCurrency(payout)}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                        Text(
+                                          'Dư kỳ này: ${CurrencyFormatter.formatCurrency(periodSurplus)}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green[700],
+                                          ),
                                         ),
                                       ],
                                     );

@@ -38,24 +38,89 @@ class HuiCalculationService {
     return contributions;
   }
 
-  /// Calculate total amount for fixed-type hui or auction hui
+  /// Calculate total amount for fixed-type hui
   double calculateTotalContribution(double contributionAmount, int numMembers) {
     return contributionAmount * numMembers;
   }
 
-  /// Calculate amount received for auction-based hui
-  /// bidAmount is the discount the winner accepts (tiền bỏ)
-  double calculateAmountReceivedWithBid(
-    double totalContribution,
+  /// Calculate discounted payment for members who haven't won yet
+  /// discounted = baseContribution - bidAmount
+  double calculateDiscountedPayment(
+    double baseContribution,
     double bidAmount,
   ) {
-    return totalContribution - bidAmount;
+    return baseContribution - bidAmount;
   }
 
-  /// Calculate cumulative surplus (total of all bids) for auction hui
-  /// This is the final surplus of the hui pot (tiền dư cuối dây)
-  double calculateCumulativeSurplus(List<WinnerModel> winners) {
-    return winners.fold(0.0, (sum, winner) => sum + winner.bidAmount);
+  /// Calculate payout for winner in auction-based hui
+  /// payout = discounted × (|U| - 1)
+  /// where U is the count of members who haven't won yet
+  double calculateWinnerPayout(
+    double discountedPayment,
+    int membersNotYetWon,
+  ) {
+    return discountedPayment * (membersNotYetWon - 1);
+  }
+
+  /// Calculate total collected in a period for auction-based hui
+  /// totalCollected = (discounted × |U|) + (full × |H|)
+  /// where U = members who haven't won, H = members who already won
+  double calculatePeriodTotalCollected(
+    double baseContribution,
+    double bidAmount,
+    int membersNotYetWon,
+    int membersAlreadyWon,
+  ) {
+    final discounted = calculateDiscountedPayment(baseContribution, bidAmount);
+    final fullPayments = baseContribution * membersAlreadyWon;
+    final discountedPayments = discounted * membersNotYetWon;
+    return fullPayments + discountedPayments;
+  }
+
+  /// Calculate surplus for a single period
+  /// periodSurplus = totalCollected - payout
+  double calculatePeriodSurplus(
+    double baseContribution,
+    double bidAmount,
+    int membersNotYetWon,
+    int membersAlreadyWon,
+  ) {
+    final totalCollected = calculatePeriodTotalCollected(
+      baseContribution,
+      bidAmount,
+      membersNotYetWon,
+      membersAlreadyWon,
+    );
+    final discounted = calculateDiscountedPayment(baseContribution, bidAmount);
+    final payout = calculateWinnerPayout(discounted, membersNotYetWon);
+    return totalCollected - payout;
+  }
+
+  /// Calculate cumulative surplus across all periods
+  /// This requires knowing the bid amount and winner count for each period
+  double calculateCumulativeSurplus(
+    double baseContribution,
+    int totalMembers,
+    List<WinnerModel> winners,
+  ) {
+    double cumulativeSurplus = 0.0;
+    
+    for (int i = 0; i < winners.length; i++) {
+      final winner = winners[i];
+      final membersAlreadyWon = i; // Members who won in previous periods
+      final membersNotYetWon = totalMembers - membersAlreadyWon;
+      
+      final periodSurplus = calculatePeriodSurplus(
+        baseContribution,
+        winner.bidAmount,
+        membersNotYetWon,
+        membersAlreadyWon,
+      );
+      
+      cumulativeSurplus += periodSurplus;
+    }
+    
+    return cumulativeSurplus;
   }
 
   /// Calculate total paid by user so far
@@ -93,11 +158,5 @@ class HuiCalculationService {
     if (contributions.isEmpty) return 0.0;
     final paidCount = contributions.where((c) => c.isPaid).length;
     return (paidCount / contributions.length) * 100;
-  }
-
-  /// Calculate accumulated interest for interest-based hui
-  double calculateAccumulatedInterest(List<WinnerModel> winners) {
-    // This is now the cumulative surplus (tiền dư)
-    return calculateCumulativeSurplus(winners);
   }
 }

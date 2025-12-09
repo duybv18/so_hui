@@ -82,15 +82,18 @@ class SeedDataService {
         notes: 'Đã đóng và có người hốt',
       ));
 
-      // Create winner with bid amount
+      // Create winner with bid amount using correct calculation
       final bidAmount = 800000.0 - (i * 100000); // 800k, 700k
-      final totalContribution = calcService.calculateTotalContribution(
+      final membersAlreadyWon = i; // Number of members who won before this period
+      final membersNotYetWon = interestHui.numMembers - membersAlreadyWon;
+      
+      final discounted = calcService.calculateDiscountedPayment(
         interestHui.contributionAmount,
-        interestHui.numMembers,
-      );
-      final amountReceived = calcService.calculateAmountReceivedWithBid(
-        totalContribution,
         bidAmount,
+      );
+      final amountReceived = calcService.calculateWinnerPayout(
+        discounted,
+        membersNotYetWon,
       );
 
       await contributionRepo.createWinner(WinnerModel(
