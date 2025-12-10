@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class AppTheme {
   // Light Theme
@@ -67,6 +68,4 @@ class AppTheme {
 }
 
 // Theme Mode Provider
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
