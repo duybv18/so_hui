@@ -1,4 +1,5 @@
 import 'package:so_hui_app/core/database/database.dart';
+import 'package:drift/drift.dart' as d;
 
 class HuiGroupModel {
   final int? id;
@@ -52,7 +53,7 @@ class HuiGroupModel {
       type: type,
       startDate: startDate,
       frequency: frequency,
-      notes: Value(notes),
+      notes: d.Value(notes),
     );
   }
 
@@ -127,9 +128,9 @@ class ContributionModel {
       huiGroupId: huiGroupId,
       periodNumber: periodNumber,
       dueDate: dueDate,
-      isPaid: Value(isPaid),
-      actualAmount: Value(actualAmount),
-      notes: Value(notes),
+      isPaid: d.Value(isPaid),
+      actualAmount: d.Value(actualAmount),
+      notes: d.Value(notes),
     );
   }
 

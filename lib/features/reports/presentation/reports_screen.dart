@@ -334,7 +334,7 @@ class ReportsScreen extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Container(
-                  height: height > 0 ? height : 20,
+                  height: height > 0 ? height.toDouble() : 20,
                   decoration: BoxDecoration(
                     color: isPaid ? Colors.green : Colors.grey.withOpacity(0.3),
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
@@ -378,6 +378,8 @@ class ReportsScreen extends ConsumerWidget {
         return 'Hàng tuần';
       case FrequencyType.monthly:
         return 'Hàng tháng';
+      default: 
+        return 'Không xác định';
     }
   }
 }
