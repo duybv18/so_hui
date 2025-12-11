@@ -60,7 +60,8 @@ class ContributionRepository {
       id: model.id!,
       contributionId: model.contributionId,
       winnerName: model.winnerName,
-      interestRate: model.interestRate,
+      bidAmount: model.bidAmount,
+      // interestRate: model.interestRate,
       amountReceived: model.amountReceived,
       createdAt: model.createdAt ?? DateTime.now(),
     );

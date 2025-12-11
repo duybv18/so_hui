@@ -5,6 +5,7 @@ import 'package:so_hui_app/models/models.dart';
 import 'package:so_hui_app/common/utils/currency_formatter.dart';
 import 'package:so_hui_app/common/utils/date_formatter.dart';
 import 'package:so_hui_app/common/widgets/stats_card.dart';
+import 'package:so_hui_app/core/database/database.dart';
 
 final reportsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, huiId) async {
   final huiRepo = ref.watch(huiRepositoryProvider);
@@ -378,8 +379,8 @@ class ReportsScreen extends ConsumerWidget {
         return 'Hàng tuần';
       case FrequencyType.monthly:
         return 'Hàng tháng';
-      default: 
-        return 'Không xác định';
+      // default: 
+      //   return 'Không xác định';
     }
   }
 }
