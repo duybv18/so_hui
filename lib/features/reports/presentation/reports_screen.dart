@@ -25,6 +25,52 @@ final reportsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, h
   final progress = calcService.calculateProgress(contributions);
   final projectedEndDate = calcService.calculateProjectedEndDate(hui);
 
+  // For interest-based hui, get winner information
+  WinnerModel? userWinnerRecord;
+  List<WinnerModel> allWinners = [];
+  double? profitLoss;
+  double? adminFinalAmount;
+  double? totalSurplus;
+
+  if (hui.type == HuiType.interest) {
+    // Get all winners for this hui
+    for (final contribution in contributions) {
+      if (contribution.id != null) {
+        final winner = await contributionRepo.getWinnerByContribution(contribution.id!);
+        if (winner != null) {
+          allWinners.add(winner);
+          // Check if current user won (winner name is "Bạn")
+          if (winner.winnerName == 'Bạn') {
+            userWinnerRecord = winner;
+          }
+        }
+      }
+    }
+
+    // Calculate cumulative surplus for interest-based hui
+    if (allWinners.isNotEmpty) {
+      totalSurplus = calcService.calculateCumulativeSurplus(
+        hui.contributionAmount,
+        hui.numMembers,
+        allWinners,
+      );
+    }
+
+    // Calculate profit/loss for player
+    if (hui.userRole == UserRole.player) {
+      profitLoss = calcService.calculatePlayerProfitLoss(contributions, userWinnerRecord);
+    }
+
+    // Calculate final amount for admin
+    if (hui.userRole == UserRole.admin && allWinners.isNotEmpty) {
+      adminFinalAmount = calcService.calculateAdminFinalAmount(
+        hui.contributionAmount,
+        hui.numMembers,
+        allWinners,
+      );
+    }
+  }
+
   // Cash flow by period
   final cashFlowData = <Map<String, dynamic>>[];
   for (final contribution in contributions) {
@@ -47,6 +93,9 @@ final reportsProvider = FutureProvider.family<Map<String, dynamic>, int>((ref, h
     'progress': progress,
     'projectedEndDate': projectedEndDate,
     'cashFlowData': cashFlowData,
+    'profitLoss': profitLoss,
+    'adminFinalAmount': adminFinalAmount,
+    'totalSurplus': totalSurplus,
   };
 });
 
@@ -75,6 +124,9 @@ class ReportsScreen extends ConsumerWidget {
           final progress = data['progress'] as double;
           final projectedEndDate = data['projectedEndDate'] as DateTime;
           final cashFlowData = data['cashFlowData'] as List<Map<String, dynamic>>;
+          final profitLoss = data['profitLoss'] as double?;
+          final adminFinalAmount = data['adminFinalAmount'] as double?;
+          final totalSurplus = data['totalSurplus'] as double?;
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -111,7 +163,7 @@ class ReportsScreen extends ConsumerWidget {
                   color: Colors.blue,
                 ),
                 const SizedBox(height: 12),
-                Row(
+Row(
                   children: [
                     Expanded(
                       child: StatsCard(
@@ -119,6 +171,7 @@ class ReportsScreen extends ConsumerWidget {
                         value: CurrencyFormatter.formatCompact(totalPaid),
                         icon: Icons.payments,
                         color: Colors.green,
+                        compact: true,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -128,10 +181,62 @@ class ReportsScreen extends ConsumerWidget {
                         value: CurrencyFormatter.formatCompact(totalRemaining),
                         icon: Icons.pending_actions,
                         color: Colors.orange,
+                        compact: true,
                       ),
                     ),
                   ],
                 ),
+                // Show profit/loss and cumulative surplus row for interest-based hui
+                if (hui.type == HuiType.interest) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      if (hui.userRole == UserRole.player && profitLoss != null)
+                        Expanded(
+                          child: StatsCard(
+                            title: 'Lời/Lỗ',
+                            value: '${profitLoss >= 0 ? '+' : ''}${CurrencyFormatter.formatCompact(profitLoss.abs())}',
+                            icon: profitLoss >= 0 ? Icons.trending_up : Icons.trending_down,
+                            color: profitLoss >= 0 ? Colors.green : Colors.red,
+                            compact: true,
+                          ),
+                        ),
+                      if (hui.userRole == UserRole.player && profitLoss != null)
+                        const SizedBox(width: 12),
+                      Expanded(
+                        child: StatsCard(
+                          title: 'Tổng dư tích lũy',
+                          value: CurrencyFormatter.formatCompact(totalSurplus ?? 0),
+                          icon: Icons.savings,
+                          color: Colors.teal,
+                          compact: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                // Show final amount for admin in interest-based hui
+                if (hui.type == HuiType.interest && hui.userRole == UserRole.admin) ...[
+                  const SizedBox(height: 12),
+                  StatsCard(
+                    title: adminFinalAmount != null ? 'Tiền dư cuối kỳ (Dự kiến)' : 'Tiền dư cuối kỳ',
+                    value: adminFinalAmount != null 
+                        ? CurrencyFormatter.formatCurrency(adminFinalAmount)
+                        : 'Chưa có dữ liệu',
+                    icon: Icons.account_balance_wallet,
+                    color: Colors.purple,
+                  ),
+                ],
+                // Show admin receives 0 for fixed hui
+                if (hui.type == HuiType.fixed && hui.userRole == UserRole.admin) ...[
+                  const SizedBox(height: 12),
+                  StatsCard(
+                    title: 'Số tiền nhận',
+                    value: CurrencyFormatter.formatCurrency(0),
+                    icon: Icons.account_balance_wallet,
+                    color: Colors.grey,
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Row(
                   children: [

@@ -1,0 +1,1 @@
+- Ở hụi sống của người chơi, màn chi tiết hụi, thêm 1 widget lời/lỗ. Với công thức là Tổng số tiền đóng - Số tiền nhận(Kì được tích hốt kì này, giá trị của người hốt nhận)

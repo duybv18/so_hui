@@ -10,6 +10,7 @@ class HuiGroupModel {
   final HuiType type;
   final DateTime startDate;
   final FrequencyType frequency;
+  final UserRole userRole;
   final String? notes;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -23,6 +24,7 @@ class HuiGroupModel {
     required this.type,
     required this.startDate,
     required this.frequency,
+    this.userRole = UserRole.player, // Default to player
     this.notes,
     this.createdAt,
     this.updatedAt,
@@ -38,6 +40,7 @@ class HuiGroupModel {
       type: entity.type,
       startDate: entity.startDate,
       frequency: entity.frequency,
+      userRole: entity.userRole,
       notes: entity.notes,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
@@ -53,6 +56,7 @@ class HuiGroupModel {
       type: type,
       startDate: startDate,
       frequency: frequency,
+      userRole: d.Value(userRole),
       notes: d.Value(notes),
     );
   }
@@ -66,6 +70,7 @@ class HuiGroupModel {
     HuiType? type,
     DateTime? startDate,
     FrequencyType? frequency,
+    UserRole? userRole,
     String? notes,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -79,6 +84,7 @@ class HuiGroupModel {
       type: type ?? this.type,
       startDate: startDate ?? this.startDate,
       frequency: frequency ?? this.frequency,
+      userRole: userRole ?? this.userRole,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

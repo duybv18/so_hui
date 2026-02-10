@@ -22,6 +22,52 @@ final huiDetailProvider = FutureProvider.family<Map<String, dynamic>, int>((ref,
   final progress = calcService.calculateProgress(contributions);
   final overdueContributions = contributions.where((c) => calcService.isOverdue(c)).toList();
 
+  // For interest-based hui, get winner information
+  WinnerModel? userWinnerRecord;
+  List<WinnerModel> allWinners = [];
+  double? profitLoss;
+  double? adminFinalAmount;
+  double? totalSurplus;
+
+  if (hui.type == HuiType.interest) {
+    // Get all winners for this hui
+    for (final contribution in contributions) {
+      if (contribution.id != null) {
+        final winner = await contributionRepo.getWinnerByContribution(contribution.id!);
+        if (winner != null) {
+          allWinners.add(winner);
+          // Check if current user won (winner name is "Bạn")
+          if (winner.winnerName == 'Bạn') {
+            userWinnerRecord = winner;
+          }
+        }
+      }
+    }
+
+    // Calculate cumulative surplus for interest-based hui
+    if (allWinners.isNotEmpty) {
+      totalSurplus = calcService.calculateCumulativeSurplus(
+        hui.contributionAmount,
+        hui.numMembers,
+        allWinners,
+      );
+    }
+
+    // Calculate profit/loss for player
+    if (hui.userRole == UserRole.player) {
+      profitLoss = calcService.calculatePlayerProfitLoss(contributions, userWinnerRecord);
+    }
+
+    // Calculate final amount for admin
+    if (hui.userRole == UserRole.admin && allWinners.isNotEmpty) {
+      adminFinalAmount = calcService.calculateAdminFinalAmount(
+        hui.contributionAmount,
+        hui.numMembers,
+        allWinners,
+      );
+    }
+  }
+
   return {
     'hui': hui,
     'contributions': contributions,
@@ -29,6 +75,10 @@ final huiDetailProvider = FutureProvider.family<Map<String, dynamic>, int>((ref,
     'totalRemaining': totalRemaining,
     'progress': progress,
     'overdueContributions': overdueContributions,
+    'userWinnerRecord': userWinnerRecord,
+    'profitLoss': profitLoss,
+    'adminFinalAmount': adminFinalAmount,
+    'totalSurplus': totalSurplus,
   };
 });
 
@@ -50,9 +100,16 @@ class HuiDetailScreen extends ConsumerWidget {
           final totalRemaining = data['totalRemaining'] as double;
           final progress = data['progress'] as double;
           final overdueContributions = data['overdueContributions'] as List<ContributionModel>;
+          final profitLoss = data['profitLoss'] as double?;
+          final adminFinalAmount = data['adminFinalAmount'] as double?;
+          final totalSurplus = data['totalSurplus'] as double?;
 
-          return CustomScrollView(
-            slivers: [
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(huiDetailProvider(huiId));
+            },
+            child: CustomScrollView(
+              slivers: [
               SliverAppBar(
                 expandedHeight: 200,
                 pinned: true,
@@ -150,6 +207,13 @@ class HuiDetailScreen extends ConsumerWidget {
                               const Divider(),
                               _buildInfoRow(
                                 context,
+                                'Vai trò của bạn',
+                                hui.userRole == UserRole.admin ? 'Chủ hụi' : 'Người chơi',
+                                hui.userRole == UserRole.admin ? Icons.admin_panel_settings : Icons.person,
+                              ),
+                              const Divider(),
+                              _buildInfoRow(
+                                context,
                                 'Mệnh giá góp',
                                 CurrencyFormatter.formatCurrency(hui.contributionAmount),
                                 Icons.attach_money,
@@ -211,19 +275,82 @@ class HuiDetailScreen extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      StatsCard(
-                        title: 'Tổng đã góp',
-                        value: CurrencyFormatter.formatCurrency(totalPaid),
-                        icon: Icons.payments,
-                        color: Colors.green,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: StatsCard(
+                              title: 'Tổng đã góp',
+                              value: CurrencyFormatter.formatCompact(totalPaid),
+                              icon: Icons.payments,
+                              color: Colors.green,
+                              compact: true,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: StatsCard(
+                              title: 'Còn phải góp',
+                              value: CurrencyFormatter.formatCompact(totalRemaining),
+                              icon: Icons.pending_actions,
+                              color: Colors.orange,
+                              compact: true,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      StatsCard(
-                        title: 'Còn phải góp',
-                        value: CurrencyFormatter.formatCurrency(totalRemaining),
-                        icon: Icons.pending_actions,
-                        color: Colors.orange,
-                      ),
+                      // Show profit/loss and cumulative surplus row for interest-based hui
+                      if (hui.type == HuiType.interest) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            if (hui.userRole == UserRole.player && profitLoss != null)
+                              Expanded(
+                                child: StatsCard(
+                                  title: 'Lời/Lỗ',
+                                  value: '${profitLoss >= 0 ? '+' : ''}${CurrencyFormatter.formatCompact(profitLoss.abs())}',
+                                  icon: profitLoss >= 0 ? Icons.trending_up : Icons.trending_down,
+                                  color: profitLoss >= 0 ? Colors.green : Colors.red,
+                                  compact: true,
+                                ),
+                              ),
+                            if (hui.userRole == UserRole.player && profitLoss != null)
+                              const SizedBox(width: 12),
+                            Expanded(
+                              child: StatsCard(
+                                title: 'Tổng dư tích lũy',
+                                value: totalSurplus != null 
+                                    ? CurrencyFormatter.formatCompact(totalSurplus)
+                                    : 'Chưa có dữ liệu',
+                                icon: Icons.savings,
+                                color: Colors.teal,
+                                compact: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      // Show final amount for admin in interest-based hui
+                      if (hui.type == HuiType.interest && hui.userRole == UserRole.admin) ...[
+                        const SizedBox(height: 12),
+                        StatsCard(
+                          title: adminFinalAmount != null ? 'Tiền dư cuối kỳ (Dự kiến)' : 'Tiền dư cuối kỳ',
+                          value: adminFinalAmount != null 
+                              ? CurrencyFormatter.formatCurrency(adminFinalAmount)
+                              : 'Chưa có dữ liệu',
+                          icon: Icons.account_balance_wallet,
+                          color: Colors.purple,
+                        ),
+                      ],
+                      // Show admin receives 0 for fixed hui
+                      if (hui.type == HuiType.fixed && hui.userRole == UserRole.admin) ...[
+                        const SizedBox(height: 12),
+                        StatsCard(
+                          title: 'Số tiền nhận',
+                          value: CurrencyFormatter.formatCurrency(0),
+                          icon: Icons.account_balance_wallet,
+                          color: Colors.grey,
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -297,6 +424,7 @@ class HuiDetailScreen extends ConsumerWidget {
                 child: SizedBox(height: 80),
               ),
             ],
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),

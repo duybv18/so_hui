@@ -31,6 +31,7 @@ class HuiRepository {
       type: model.type,
       startDate: model.startDate,
       frequency: model.frequency,
+      userRole: model.userRole,
       notes: model.notes,
       createdAt: model.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
