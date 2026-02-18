@@ -27,6 +27,7 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
 
   HuiType _selectedType = HuiType.fixed;
   FrequencyType _selectedFrequency = FrequencyType.monthly;
+  UserRole _selectedUserRole = UserRole.player;
   DateTime _startDate = DateTime.now();
   bool _isLoading = false;
 
@@ -50,6 +51,7 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
         _notesController.text = hui.notes ?? '';
         _selectedType = hui.type;
         _selectedFrequency = hui.frequency;
+        _selectedUserRole = hui.userRole;
         _startDate = hui.startDate;
       });
     }
@@ -100,6 +102,7 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
         type: _selectedType,
         startDate: _startDate,
         frequency: _selectedFrequency,
+        userRole: _selectedUserRole,
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
 
@@ -186,6 +189,31 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
                 if (value != null) {
                   setState(() {
                     _selectedType = value;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<UserRole>(
+              value: _selectedUserRole,
+              decoration: const InputDecoration(
+                labelText: 'Vai trò của bạn trong hụi này',
+                helperText: 'Chủ hụi không đóng tiền, chỉ nhận tiền dư cuối kỳ',
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: UserRole.player,
+                  child: Text('Người chơi'),
+                ),
+                DropdownMenuItem(
+                  value: UserRole.admin,
+                  child: Text('Chủ hụi'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedUserRole = value;
                   });
                 }
               },

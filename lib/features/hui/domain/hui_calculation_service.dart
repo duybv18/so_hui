@@ -171,4 +171,29 @@ class HuiCalculationService {
     final paidCount = contributions.where((c) => c.isPaid).length;
     return (paidCount / contributions.length) * 100;
   }
+
+  /// Calculate profit/loss for player in interest-based hui
+  /// Profit/Loss = Amount Received - Total Paid
+  /// Returns null if player hasn't won yet
+  double? calculatePlayerProfitLoss(
+    List<ContributionModel> contributions,
+    WinnerModel? userWinnerRecord,
+  ) {
+    if (userWinnerRecord == null) return null;
+    
+    final totalPaid = calculateTotalPaid(contributions);
+    final amountReceived = userWinnerRecord.amountReceived;
+    
+    return amountReceived - totalPaid;
+  }
+
+  /// Calculate admin's final amount for interest-based hui
+  /// Admin receives cumulative surplus after all periods
+  double calculateAdminFinalAmount(
+    double baseContribution,
+    int totalMembers,
+    List<WinnerModel> winners,
+  ) {
+    return calculateCumulativeSurplus(baseContribution, totalMembers, winners);
+  }
 }

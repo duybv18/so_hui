@@ -5,6 +5,7 @@ class StatsCard extends StatelessWidget {
   final String value;
   final IconData icon;
   final Color? color;
+  final bool compact;
 
   const StatsCard({
     super.key,
@@ -12,6 +13,7 @@ class StatsCard extends StatelessWidget {
     required this.value,
     required this.icon,
     this.color,
+    this.compact = false,
   });
 
   @override
@@ -45,16 +47,20 @@ class StatsCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               title,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: (compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 4),
             Text(
               value,
-              style: theme.textTheme.headlineSmall?.copyWith(
+              style: (compact ? theme.textTheme.titleLarge : theme.textTheme.headlineSmall)?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

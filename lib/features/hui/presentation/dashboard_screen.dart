@@ -101,18 +101,28 @@ class DashboardScreen extends ConsumerWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        StatsCard(
-                          title: 'Tổng đã góp',
-                          value: CurrencyFormatter.formatCurrency(totalPaid),
-                          icon: Icons.payments,
-                          color: Colors.green,
-                        ),
-                        const SizedBox(height: 12),
-                        StatsCard(
-                          title: 'Còn phải góp',
-                          value: CurrencyFormatter.formatCurrency(totalRemaining),
-                          icon: Icons.pending_actions,
-                          color: Colors.orange,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: StatsCard(
+                                title: 'Tổng đã góp',
+                                value: CurrencyFormatter.formatCompact(totalPaid),
+                                icon: Icons.payments,
+                                color: Colors.green,
+                                compact: true,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: StatsCard(
+                                title: 'Còn phải góp',
+                                value: CurrencyFormatter.formatCompact(totalRemaining),
+                                icon: Icons.pending_actions,
+                                color: Colors.orange,
+                                compact: true,
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 24),
                         Row(

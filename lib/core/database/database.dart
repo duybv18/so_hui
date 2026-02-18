@@ -19,6 +19,12 @@ enum FrequencyType {
   monthly,
 }
 
+// User Role Types
+enum UserRole {
+  admin, // Chủ hụi - doesn't contribute, receives surplus
+  player, // Người chơi - participates normally
+}
+
 // Table: Hui Groups
 class HuiGroups extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -29,6 +35,7 @@ class HuiGroups extends Table {
   IntColumn get type => intEnum<HuiType>()();
   DateTimeColumn get startDate => dateTime()();
   IntColumn get frequency => intEnum<FrequencyType>()();
+  IntColumn get userRole => intEnum<UserRole>().withDefault(const Constant(1))(); // Default to player (1)
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -62,7 +69,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -70,7 +77,10 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
     },
     onUpgrade: (Migrator m, int from, int to) async {
-      // Handle future migrations here
+      if (from < 2) {
+        // Add userRole column with default value (player = 1)
+        await m.addColumn(huiGroups, huiGroups.userRole);
+      }
     },
   );
 

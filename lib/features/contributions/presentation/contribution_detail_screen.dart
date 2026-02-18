@@ -48,6 +48,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
   final _winnerNameController = TextEditingController();
   final _bidAmountController = TextEditingController(); // Changed from _interestRateController
   bool _isPaid = false;
+  bool _iWonThisPeriod = false; // Did current user win this period?
   bool _isLoading = false;
 
   @override
@@ -99,8 +100,8 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
 
       // Handle winner for auction-based hui
       if (hui.type == HuiType.interest && _isPaid) {
-        if (_winnerNameController.text.trim().isNotEmpty &&
-            _bidAmountController.text.trim().isNotEmpty) {
+        // Only create winner if someone won (either current user or someone else with bid amount)
+        if (_bidAmountController.text.trim().isNotEmpty) {
           final bidAmount = double.parse(_bidAmountController.text);
           
           // Calculate payout using correct formula: (base - bid) × (N - 1)
@@ -111,9 +112,20 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             hui.numMembers,
           );
 
+          // Determine winner name based on who won
+          String winnerName;
+          if (_iWonThisPeriod) {
+            winnerName = 'Bạn';
+          } else {
+            // If someone else won and name is provided, use it; otherwise use "Người khác"
+            winnerName = _winnerNameController.text.trim().isEmpty 
+                ? 'Người khác' 
+                : _winnerNameController.text.trim();
+          }
+
           final winner = WinnerModel(
             contributionId: contribution.id!,
-            winnerName: _winnerNameController.text.trim(),
+            winnerName: winnerName,
             bidAmount: bidAmount,
             amountReceived: amountReceived,
           );
@@ -171,15 +183,21 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
             if (winner != null) {
               _winnerNameController.text = winner.winnerName;
               _bidAmountController.text = winner.bidAmount.toString();
+              // If winner name is "Bạn", current user won this period
+              _iWonThisPeriod = winner.winnerName == 'Bạn';
             }
           }
 
           final calcService = ref.read(huiCalculationServiceProvider);
           final isOverdue = calcService.isOverdue(contribution);
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(contributionDetailProvider(widget.contributionId));
+            },
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -306,13 +324,27 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                           ),
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _winnerNameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Người hốt',
-                            hintText: 'Nhập tên người hốt...',
-                          ),
+                        SwitchListTile(
+                          title: const Text('Hốt kì này?'),
+                          subtitle: const Text('Bạn có phải là người hốt kì này không?'),
+                          value: _iWonThisPeriod,
+                          onChanged: (value) {
+                            setState(() {
+                              _iWonThisPeriod = value;
+                            });
+                          },
                         ),
+                        if (!_iWonThisPeriod) ...[
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _winnerNameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Người hốt',
+                              hintText: 'Nhập tên người hốt (tùy chọn)...',
+                              helperText: 'Có thể để trống nếu không biết tên',
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _bidAmountController,
@@ -425,6 +457,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                     : const Text('Lưu thay đổi'),
               ),
             ],
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
