@@ -42,4 +42,25 @@ class HuiRepository {
   Future<int> deleteHuiGroup(int id) async {
     return await _database.deleteHuiGroup(id);
   }
+
+  Future<List<HuiMemberModel>> getMembersByHuiGroup(int huiGroupId) async {
+    final entities = await _database.getMembersByHuiGroup(huiGroupId);
+    return entities.map((e) => HuiMemberModel.fromEntity(e)).toList();
+  }
+
+  Future<int> createHuiMember(HuiMemberModel model) async {
+    return await _database.createHuiMember(model.toCompanion());
+  }
+
+  Future<void> replaceMembers(int huiGroupId, List<String> memberNames) async {
+    await _database.deleteMembersByHuiGroup(huiGroupId);
+    for (final name in memberNames) {
+      await _database.createHuiMember(
+        HuiMembersCompanion.insert(
+          huiGroupId: huiGroupId,
+          name: name,
+        ),
+      );
+    }
+  }
 }

@@ -13,6 +13,7 @@ final contributionDetailProvider = FutureProvider.family<Map<String, dynamic>, i
   (ref, contributionId) async {
     final contributionRepo = ref.watch(contributionRepositoryProvider);
     final huiRepo = ref.watch(huiRepositoryProvider);
+    final calcService = ref.watch(huiCalculationServiceProvider);
 
     final contribution = await contributionRepo.getContributionById(contributionId);
     if (contribution == null) throw Exception('Contribution not found');
@@ -25,10 +26,45 @@ final contributionDetailProvider = FutureProvider.family<Map<String, dynamic>, i
       winner = await contributionRepo.getWinnerByContribution(contributionId);
     }
 
+    final members = await huiRepo.getMembersByHuiGroup(hui.id!);
+    final memberContributions = await contributionRepo.getMemberContributionsByContribution(contributionId);
+    final allContributions = await contributionRepo.getContributionsByHuiGroup(hui.id!);
+
+    WinnerModel? userWinnerRecord;
+    if (hui.type == HuiType.interest && hui.userRole == UserRole.player) {
+      for (final period in allContributions) {
+        if (period.id == null) continue;
+        final periodWinner = await contributionRepo.getWinnerByContribution(period.id!);
+        if (periodWinner?.winnerName == 'Bạn') {
+          userWinnerRecord = periodWinner;
+          break;
+        }
+      }
+    }
+
+    final profitLoss = (hui.type == HuiType.interest && hui.userRole == UserRole.player)
+        ? calcService.calculatePlayerProfitLoss(allContributions, userWinnerRecord)
+        : null;
+
+    final totalsByMemberInHui = <int, double>{};
+    for (final period in allContributions) {
+      if (period.id == null) continue;
+      final periodMemberContributions =
+          await contributionRepo.getMemberContributionsByContribution(period.id!);
+      for (final item in periodMemberContributions) {
+        totalsByMemberInHui[item.memberId] =
+            (totalsByMemberInHui[item.memberId] ?? 0) + item.amount;
+      }
+    }
+
     return {
       'contribution': contribution,
       'hui': hui,
       'winner': winner,
+      'members': members,
+      'memberContributions': memberContributions,
+      'totalsByMemberInHui': totalsByMemberInHui,
+      'profitLoss': profitLoss,
     };
   },
 );
@@ -47,6 +83,8 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
   final _notesController = TextEditingController();
   final _winnerNameController = TextEditingController();
   final _bidAmountController = TextEditingController(); // Changed from _interestRateController
+  final Map<int, TextEditingController> _memberAmountControllers = {};
+  final Map<int, DateTime?> _memberPaidAtValues = {};
   bool _isPaid = false;
   bool _iWonThisPeriod = false; // Did current user win this period?
   bool _isLoading = false;
@@ -57,7 +95,73 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
     _notesController.dispose();
     _winnerNameController.dispose();
     _bidAmountController.dispose();
+    for (final controller in _memberAmountControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _syncMemberAmountControllers(
+    List<HuiMemberModel> members,
+    List<MemberContributionModel> memberContributions,
+  ) {
+    final paymentByMember = {
+      for (final mc in memberContributions) mc.memberId: mc.amount,
+    };
+    final paidAtByMember = {
+      for (final mc in memberContributions) mc.memberId: mc.paidAt,
+    };
+
+    for (final member in members) {
+      final memberId = member.id;
+      if (memberId == null) continue;
+
+      final existing = _memberAmountControllers[memberId];
+      if (existing == null) {
+        _memberAmountControllers[memberId] = TextEditingController(
+          text: (paymentByMember[memberId] ?? 0).toStringAsFixed(0),
+        );
+      } else if (existing.text.isEmpty && paymentByMember.containsKey(memberId)) {
+        existing.text = paymentByMember[memberId]!.toStringAsFixed(0);
+      }
+
+      _memberPaidAtValues[memberId] = _memberPaidAtValues[memberId] ?? paidAtByMember[memberId];
+    }
+
+    final memberIds = members.map((m) => m.id).whereType<int>().toSet();
+    final obsoleteIds = _memberAmountControllers.keys.where((id) => !memberIds.contains(id)).toList();
+    for (final id in obsoleteIds) {
+      _memberAmountControllers[id]?.dispose();
+      _memberAmountControllers.remove(id);
+      _memberPaidAtValues.remove(id);
+    }
+  }
+
+  Future<void> _selectPaidAtForMember(int memberId) async {
+    final current = _memberPaidAtValues[memberId] ?? DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _memberPaidAtValues[memberId] = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
   }
 
   Future<int> _getMembersAlreadyWon(int huiId, int currentPeriod) async {
@@ -77,7 +181,11 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
     return count;
   }
 
-  Future<void> _saveContribution(HuiGroupModel hui, ContributionModel contribution) async {
+  Future<void> _saveContribution(
+    HuiGroupModel hui,
+    ContributionModel contribution,
+    List<HuiMemberModel> members,
+  ) async {
     setState(() {
       _isLoading = true;
     });
@@ -86,20 +194,56 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
       final contributionRepo = ref.read(contributionRepositoryProvider);
       final calcService = ref.read(huiCalculationServiceProvider);
 
-      final actualAmount = _amountController.text.trim().isEmpty
-          ? hui.contributionAmount
-          : double.parse(_amountController.text);
+      double actualAmount;
+      if (hui.userRole == UserRole.admin && members.isNotEmpty) {
+        actualAmount = 0;
+        for (final member in members) {
+          final memberId = member.id;
+          if (memberId == null) continue;
+          final text = _memberAmountControllers[memberId]?.text.trim() ?? '';
+          final parsed = text.isEmpty ? 0.0 : (double.tryParse(text) ?? 0.0);
+          actualAmount += parsed;
+        }
+      } else {
+        actualAmount = _amountController.text.trim().isEmpty
+            ? hui.contributionAmount
+            : double.parse(_amountController.text);
+      }
+
+      final computedIsPaid = hui.userRole == UserRole.admin
+          ? actualAmount > 0
+          : _isPaid;
 
       final updatedContribution = contribution.copyWith(
-        isPaid: _isPaid,
+        isPaid: computedIsPaid,
         actualAmount: actualAmount,
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
       );
 
       await contributionRepo.updateContribution(updatedContribution);
 
+      if (hui.userRole == UserRole.admin) {
+        for (final member in members) {
+          final memberId = member.id;
+          if (memberId == null) continue;
+          final text = _memberAmountControllers[memberId]?.text.trim() ?? '';
+          final double amount = text.isEmpty ? 0.0 : (double.tryParse(text) ?? 0.0);
+          final paidAt = amount > 0
+              ? (_memberPaidAtValues[memberId] ?? DateTime.now())
+              : null;
+          await contributionRepo.upsertMemberContribution(
+            MemberContributionModel(
+              contributionId: contribution.id!,
+              memberId: memberId,
+              amount: amount,
+              paidAt: paidAt,
+            ),
+          );
+        }
+      }
+
       // Handle winner for auction-based hui
-      if (hui.type == HuiType.interest && _isPaid) {
+      if (hui.type == HuiType.interest && computedIsPaid) {
         // Only create winner if someone won (either current user or someone else with bid amount)
         if (_bidAmountController.text.trim().isNotEmpty) {
           final bidAmount = double.parse(_bidAmountController.text);
@@ -143,7 +287,7 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cập nhật thành công')),
         );
-        ref.invalidate(contributionDetailProvider);
+        ref.invalidate(contributionDetailProvider(widget.contributionId));
       }
     } catch (e) {
       if (mounted) {
@@ -173,6 +317,12 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
           final contribution = data['contribution'] as ContributionModel;
           final hui = data['hui'] as HuiGroupModel;
           final winner = data['winner'] as WinnerModel?;
+          final members = data['members'] as List<HuiMemberModel>;
+          final memberContributions = data['memberContributions'] as List<MemberContributionModel>;
+          final totalsByMemberInHui = data['totalsByMemberInHui'] as Map<int, double>;
+          final profitLoss = data['profitLoss'] as double?;
+
+          _syncMemberAmountControllers(members, memberContributions);
 
           // Initialize controllers if not yet set
           if (_amountController.text.isEmpty) {
@@ -287,15 +437,118 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                         contentPadding: EdgeInsets.zero,
                       ),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _amountController,
-                        decoration: InputDecoration(
-                          labelText: 'Số tiền thực góp (VNĐ)',
-                          hintText: CurrencyFormatter.formatCurrency(hui.contributionAmount),
+                      if (hui.userRole == UserRole.admin && members.isNotEmpty) ...[
+                        Text(
+                          'Số tiền từng người đã đóng',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      ),
+                        const SizedBox(height: 8),
+                        ...members.map((member) {
+                          final memberId = member.id;
+                          if (memberId == null) return const SizedBox.shrink();
+                          final periodAmountText = _memberAmountControllers[memberId]?.text.trim() ?? '';
+                          final periodAmount =
+                              periodAmountText.isEmpty ? 0.0 : (double.tryParse(periodAmountText) ?? 0.0);
+                          final totalInHui = totalsByMemberInHui[memberId] ?? 0.0;
+                          final paidAt = _memberPaidAtValues[memberId];
+
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                TextFormField(
+                                  controller: _memberAmountControllers[memberId],
+                                  decoration: InputDecoration(
+                                    labelText: member.name,
+                                    hintText: '0',
+                                    suffixText: 'VNĐ',
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                  onChanged: (_) {
+                                    final value = _memberAmountControllers[memberId]?.text.trim() ?? '';
+                                    final amount = value.isEmpty ? 0.0 : (double.tryParse(value) ?? 0.0);
+                                    if (amount > 0 && _memberPaidAtValues[memberId] == null) {
+                                      _memberPaidAtValues[memberId] = DateTime.now();
+                                    }
+                                    setState(() {});
+                                  },
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Kỳ này: ${CurrencyFormatter.formatCurrency(periodAmount)}  •  Trong hụi: ${CurrencyFormatter.formatCurrency(totalInHui)}',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => _selectPaidAtForMember(memberId),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: Theme.of(context).colorScheme.outlineVariant,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.schedule, size: 18),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            paidAt != null
+                                                ? 'Thời gian đóng: ${DateFormatter.formatDateTime(paidAt)}'
+                                                : 'Chọn thời gian đóng',
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                          ),
+                                        ),
+                                        const Icon(Icons.edit_calendar, size: 18),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Builder(
+                          builder: (context) {
+                            double total = 0;
+                            for (final member in members) {
+                              final memberId = member.id;
+                              if (memberId == null) continue;
+                              final value = _memberAmountControllers[memberId]?.text.trim() ?? '';
+                              total += value.isEmpty ? 0.0 : (double.tryParse(value) ?? 0.0);
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'Tổng kỳ này: ${CurrencyFormatter.formatCurrency(total)}',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ] else ...[
+                        TextFormField(
+                          controller: _amountController,
+                          decoration: InputDecoration(
+                            labelText: 'Số tiền thực góp (VNĐ)',
+                            hintText: CurrencyFormatter.formatCurrency(hui.contributionAmount),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _notesController,
@@ -444,10 +697,41 @@ class _ContributionDetailScreenState extends ConsumerState<ContributionDetailScr
                     ),
                   ),
                 ),
+                if (hui.userRole == UserRole.player) ...[
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Lời/Lỗ hiện tại',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            profitLoss == null
+                                ? 'Chưa có dữ liệu (bạn chưa hốt kỳ nào)'
+                                : '${profitLoss >= 0 ? 'Lời' : 'Lỗ'}: ${CurrencyFormatter.formatCurrency(profitLoss.abs())}',
+                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: profitLoss == null
+                                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                                  : (profitLoss >= 0 ? Colors.green[700] : Colors.red[700]),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 24),
               FilledButton(
-                onPressed: _isLoading ? null : () => _saveContribution(hui, contribution),
+                onPressed: _isLoading ? null : () => _saveContribution(hui, contribution, members),
                 child: _isLoading
                     ? const SizedBox(
                         height: 20,

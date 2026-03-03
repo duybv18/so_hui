@@ -64,12 +64,41 @@ class HuiWinners extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-@DriftDatabase(tables: [HuiGroups, Contributions, HuiWinners])
+// Table: Hui Members
+class HuiMembers extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get huiGroupId => integer().references(HuiGroups, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text().withLength(min: 1, max: 100)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {huiGroupId, name},
+      ];
+}
+
+// Table: Per-member payment in each contribution period
+class MemberContributions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get contributionId => integer().references(Contributions, #id, onDelete: KeyAction.cascade)();
+  IntColumn get memberId => integer().references(HuiMembers, #id, onDelete: KeyAction.cascade)();
+  RealColumn get amount => real()();
+  DateTimeColumn get paidAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {contributionId, memberId},
+      ];
+}
+
+@DriftDatabase(tables: [HuiGroups, Contributions, HuiWinners, HuiMembers, MemberContributions])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -80,6 +109,13 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         // Add userRole column with default value (player = 1)
         await m.addColumn(huiGroups, huiGroups.userRole);
+      }
+      if (from < 3) {
+        await m.createTable(huiMembers);
+        await m.createTable(memberContributions);
+      }
+      if (from < 4) {
+        await m.addColumn(memberContributions, memberContributions.paidAt);
       }
     },
   );
@@ -148,6 +184,43 @@ class AppDatabase extends _$AppDatabase {
   
   Future<int> deleteWinner(int id) => 
     (delete(huiWinners)..where((tbl) => tbl.id.equals(id))).go();
+
+    // Hui Members queries
+    Future<List<HuiMember>> getMembersByHuiGroup(int huiGroupId) =>
+      (select(huiMembers)
+        ..where((tbl) => tbl.huiGroupId.equals(huiGroupId))
+        ..orderBy([(tbl) => OrderingTerm(expression: tbl.id)]))
+        .get();
+
+    Future<int> createHuiMember(HuiMembersCompanion entry) => into(huiMembers).insert(entry);
+
+    Future<bool> updateHuiMember(HuiMember entry) => update(huiMembers).replace(entry);
+
+    Future<int> deleteMembersByHuiGroup(int huiGroupId) =>
+      (delete(huiMembers)..where((tbl) => tbl.huiGroupId.equals(huiGroupId))).go();
+
+    // Per-member contribution queries
+    Future<List<MemberContribution>> getMemberContributionsByContribution(int contributionId) =>
+      (select(memberContributions)
+        ..where((tbl) => tbl.contributionId.equals(contributionId))
+        ..orderBy([(tbl) => OrderingTerm(expression: tbl.memberId)]))
+        .get();
+
+    Future<MemberContribution?> getMemberContribution(int contributionId, int memberId) =>
+      (select(memberContributions)
+        ..where((tbl) =>
+          tbl.contributionId.equals(contributionId) &
+          tbl.memberId.equals(memberId)))
+        .getSingleOrNull();
+
+    Future<int> createMemberContribution(MemberContributionsCompanion entry) =>
+      into(memberContributions).insert(entry);
+
+    Future<bool> updateMemberContribution(MemberContribution entry) =>
+      update(memberContributions).replace(entry);
+
+    Future<int> deleteMemberContributionsByContribution(int contributionId) =>
+      (delete(memberContributions)..where((tbl) => tbl.contributionId.equals(contributionId))).go();
 }
 
 LazyDatabase _openConnection() {

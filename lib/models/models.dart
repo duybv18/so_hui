@@ -220,3 +220,108 @@ class WinnerModel {
     );
   }
 }
+
+class HuiMemberModel {
+  final int? id;
+  final int huiGroupId;
+  final String name;
+  final DateTime? createdAt;
+
+  HuiMemberModel({
+    this.id,
+    required this.huiGroupId,
+    required this.name,
+    this.createdAt,
+  });
+
+  factory HuiMemberModel.fromEntity(HuiMember entity) {
+    return HuiMemberModel(
+      id: entity.id,
+      huiGroupId: entity.huiGroupId,
+      name: entity.name,
+      createdAt: entity.createdAt,
+    );
+  }
+
+  HuiMembersCompanion toCompanion() {
+    return HuiMembersCompanion.insert(
+      huiGroupId: huiGroupId,
+      name: name,
+    );
+  }
+
+  HuiMemberModel copyWith({
+    int? id,
+    int? huiGroupId,
+    String? name,
+    DateTime? createdAt,
+  }) {
+    return HuiMemberModel(
+      id: id ?? this.id,
+      huiGroupId: huiGroupId ?? this.huiGroupId,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+}
+
+class MemberContributionModel {
+  final int? id;
+  final int contributionId;
+  final int memberId;
+  final double amount;
+  final DateTime? paidAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  MemberContributionModel({
+    this.id,
+    required this.contributionId,
+    required this.memberId,
+    required this.amount,
+    this.paidAt,
+    this.createdAt,
+    this.updatedAt,
+  });
+
+  factory MemberContributionModel.fromEntity(MemberContribution entity) {
+    return MemberContributionModel(
+      id: entity.id,
+      contributionId: entity.contributionId,
+      memberId: entity.memberId,
+      amount: entity.amount,
+      paidAt: entity.paidAt,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    );
+  }
+
+  MemberContributionsCompanion toCompanion() {
+    return MemberContributionsCompanion.insert(
+      contributionId: contributionId,
+      memberId: memberId,
+      amount: amount,
+      paidAt: d.Value(paidAt),
+    );
+  }
+
+  MemberContributionModel copyWith({
+    int? id,
+    int? contributionId,
+    int? memberId,
+    double? amount,
+    DateTime? paidAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return MemberContributionModel(
+      id: id ?? this.id,
+      contributionId: contributionId ?? this.contributionId,
+      memberId: memberId ?? this.memberId,
+      amount: amount ?? this.amount,
+      paidAt: paidAt ?? this.paidAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+}

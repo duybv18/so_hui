@@ -17,8 +17,10 @@ final huiDetailProvider = FutureProvider.family<Map<String, dynamic>, int>((ref,
   if (hui == null) throw Exception('Hui not found');
 
   final contributions = await contributionRepo.getContributionsByHuiGroup(huiId);
-  final totalPaid = calcService.calculateTotalPaid(contributions);
-  final totalRemaining = calcService.calculateTotalRemaining(contributions, hui.contributionAmount);
+  final members = await huiRepo.getMembersByHuiGroup(huiId);
+  double totalPaid;
+  double totalRemaining;
+  final periodCollectedByContribution = <int, double>{};
   final progress = calcService.calculateProgress(contributions);
   final overdueContributions = contributions.where((c) => calcService.isOverdue(c)).toList();
 
@@ -68,9 +70,62 @@ final huiDetailProvider = FutureProvider.family<Map<String, dynamic>, int>((ref,
     }
   }
 
+  final memberPaymentSummary = <Map<String, dynamic>>[];
+  if (hui.userRole == UserRole.admin && members.isNotEmpty) {
+    final memberPaymentsByContribution = <int, List<MemberContributionModel>>{};
+    for (final contribution in contributions) {
+      if (contribution.id == null) continue;
+      final memberPayments = await contributionRepo.getMemberContributionsByContribution(contribution.id!);
+      memberPaymentsByContribution[contribution.id!] = memberPayments;
+
+      double periodCollected = 0;
+      for (final payment in memberPayments) {
+        periodCollected += payment.amount;
+      }
+      periodCollectedByContribution[contribution.id!] = periodCollected;
+    }
+
+    totalPaid = periodCollectedByContribution.values.fold(0.0, (sum, value) => sum + value);
+    final expectedTotal = hui.contributionAmount * hui.numMembers * hui.totalPeriods;
+    totalRemaining = (expectedTotal - totalPaid) > 0 ? (expectedTotal - totalPaid) : 0.0;
+
+    for (final member in members) {
+      final memberId = member.id;
+      if (memberId == null) continue;
+
+      double total = 0;
+      final byPeriod = <int, double>{};
+
+      for (final contribution in contributions) {
+        final contributionId = contribution.id;
+        if (contributionId == null) continue;
+        double amount = 0;
+        final payments = memberPaymentsByContribution[contributionId] ?? [];
+        for (final payment in payments) {
+          if (payment.memberId == memberId) {
+            amount = payment.amount;
+            break;
+          }
+        }
+        byPeriod[contribution.periodNumber] = amount;
+        total += amount;
+      }
+
+      memberPaymentSummary.add({
+        'member': member,
+        'total': total,
+        'byPeriod': byPeriod,
+      });
+    }
+  } else {
+    totalPaid = calcService.calculateTotalPaid(contributions);
+    totalRemaining = calcService.calculateTotalRemaining(contributions, hui.contributionAmount);
+  }
+
   return {
     'hui': hui,
     'contributions': contributions,
+    'members': members,
     'totalPaid': totalPaid,
     'totalRemaining': totalRemaining,
     'progress': progress,
@@ -79,6 +134,8 @@ final huiDetailProvider = FutureProvider.family<Map<String, dynamic>, int>((ref,
     'profitLoss': profitLoss,
     'adminFinalAmount': adminFinalAmount,
     'totalSurplus': totalSurplus,
+    'memberPaymentSummary': memberPaymentSummary,
+    'periodCollectedByContribution': periodCollectedByContribution,
   };
 });
 
@@ -103,6 +160,11 @@ class HuiDetailScreen extends ConsumerWidget {
           final profitLoss = data['profitLoss'] as double?;
           final adminFinalAmount = data['adminFinalAmount'] as double?;
           final totalSurplus = data['totalSurplus'] as double?;
+          final memberPaymentSummary = data['memberPaymentSummary'] as List<Map<String, dynamic>>;
+            final periodCollectedByContribution =
+              Map<int, double>.from(data['periodCollectedByContribution'] as Map);
+            final paidCardTitle = hui.userRole == UserRole.admin ? 'Tổng đã thu' : 'Tổng đã góp';
+            final remainingCardTitle = hui.userRole == UserRole.admin ? 'Còn phải thu' : 'Còn phải góp';
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -279,7 +341,7 @@ class HuiDetailScreen extends ConsumerWidget {
                         children: [
                           Expanded(
                             child: StatsCard(
-                              title: 'Tổng đã góp',
+                              title: paidCardTitle,
                               value: CurrencyFormatter.formatCompact(totalPaid),
                               icon: Icons.payments,
                               color: Colors.green,
@@ -289,7 +351,7 @@ class HuiDetailScreen extends ConsumerWidget {
                           const SizedBox(width: 12),
                           Expanded(
                             child: StatsCard(
-                              title: 'Còn phải góp',
+                              title: remainingCardTitle,
                               value: CurrencyFormatter.formatCompact(totalRemaining),
                               icon: Icons.pending_actions,
                               color: Colors.orange,
@@ -351,6 +413,65 @@ class HuiDetailScreen extends ConsumerWidget {
                           color: Colors.grey,
                         ),
                       ],
+                      if (hui.userRole == UserRole.admin && memberPaymentSummary.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          'Đóng góp theo từng người',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ...memberPaymentSummary.map((item) {
+                          final member = item['member'] as HuiMemberModel;
+                          final total = item['total'] as double;
+                          final byPeriod = item['byPeriod'] as Map<int, double>;
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        member.name,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        CurrencyFormatter.formatCurrency(total),
+                                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                          color: Theme.of(context).colorScheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: byPeriod.entries
+                                        .map(
+                                          (entry) => Chip(
+                                            label: Text(
+                                              'Kỳ ${entry.key}: ${CurrencyFormatter.formatCompact(entry.value)}',
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -404,15 +525,22 @@ class HuiDetailScreen extends ConsumerWidget {
                           ),
                           trailing: Text(
                             contribution.isPaid
-                                ? CurrencyFormatter.formatCurrency(
-                                    contribution.actualAmount ?? hui.contributionAmount)
+                              ? CurrencyFormatter.formatCurrency(
+                                hui.userRole == UserRole.admin
+                                  ? (contribution.id != null
+                                    ? (periodCollectedByContribution[contribution.id!] ?? 0.0)
+                                    : 0.0)
+                                  : (contribution.actualAmount ?? hui.contributionAmount))
                                 : 'Chưa đóng',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: contribution.isPaid ? Colors.green : Colors.grey,
                             ),
                           ),
-                          onTap: () => context.push('/contribution/${contribution.id}'),
+                          onTap: () async {
+                            await context.push('/contribution/${contribution.id}');
+                            ref.invalidate(huiDetailProvider(huiId));
+                          },
                         ),
                       );
                     },

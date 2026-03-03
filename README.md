@@ -105,7 +105,7 @@ cd so_hui
 2. Cài đặt dependencies:
 ```bash
 flutter pub get
-```
+````
 
 3. Chạy code generation cho Drift:
 ```bash

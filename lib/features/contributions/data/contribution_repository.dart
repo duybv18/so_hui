@@ -67,4 +67,50 @@ class ContributionRepository {
     );
     return await _database.updateWinner(entity);
   }
+
+  Future<List<MemberContributionModel>> getMemberContributionsByContribution(int contributionId) async {
+    final entities = await _database.getMemberContributionsByContribution(contributionId);
+    return entities.map((e) => MemberContributionModel.fromEntity(e)).toList();
+  }
+
+  Future<MemberContributionModel?> getMemberContribution(int contributionId, int memberId) async {
+    final entity = await _database.getMemberContribution(contributionId, memberId);
+    return entity != null ? MemberContributionModel.fromEntity(entity) : null;
+  }
+
+  Future<int> createMemberContribution(MemberContributionModel model) async {
+    return await _database.createMemberContribution(model.toCompanion());
+  }
+
+  Future<bool> updateMemberContribution(MemberContributionModel model) async {
+    if (model.id == null) return false;
+    final entity = MemberContribution(
+      id: model.id!,
+      contributionId: model.contributionId,
+      memberId: model.memberId,
+      amount: model.amount,
+      paidAt: model.paidAt,
+      createdAt: model.createdAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    return await _database.updateMemberContribution(entity);
+  }
+
+  Future<int> upsertMemberContribution(MemberContributionModel model) async {
+    final existing = await getMemberContribution(model.contributionId, model.memberId);
+    if (existing != null) {
+      await updateMemberContribution(
+        model.copyWith(
+          id: existing.id,
+          createdAt: existing.createdAt,
+        ),
+      );
+      return existing.id!;
+    }
+    return await createMemberContribution(model);
+  }
+
+  Future<int> deleteMemberContributionsByContribution(int contributionId) async {
+    return await _database.deleteMemberContributionsByContribution(contributionId);
+  }
 }

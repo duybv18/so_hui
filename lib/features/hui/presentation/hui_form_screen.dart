@@ -24,6 +24,7 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
   final _numMembersController = TextEditingController();
   final _contributionAmountController = TextEditingController();
   final _notesController = TextEditingController();
+  final List<TextEditingController> _memberNameControllers = [];
 
   HuiType _selectedType = HuiType.fixed;
   FrequencyType _selectedFrequency = FrequencyType.monthly;
@@ -34,6 +35,7 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
   @override
   void initState() {
     super.initState();
+    _numMembersController.addListener(_syncMemberControllersWithCount);
     if (widget.huiId != null) {
       _loadHuiData();
     }
@@ -54,6 +56,18 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
         _selectedUserRole = hui.userRole;
         _startDate = hui.startDate;
       });
+
+      if (hui.userRole == UserRole.admin && hui.id != null) {
+        final huiRepo = ref.read(huiRepositoryProvider);
+        final members = await huiRepo.getMembersByHuiGroup(hui.id!);
+        if (!mounted) return;
+        _syncMemberControllersWithCount();
+        for (int i = 0; i < _memberNameControllers.length && i < members.length; i++) {
+          _memberNameControllers[i].text = members[i].name;
+        }
+      } else {
+        _syncMemberControllersWithCount();
+      }
     }
   }
 
@@ -64,7 +78,63 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
     _numMembersController.dispose();
     _contributionAmountController.dispose();
     _notesController.dispose();
+    for (final controller in _memberNameControllers) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _syncMemberControllersWithCount() {
+    final targetCount = int.tryParse(_numMembersController.text) ?? 0;
+    if (_selectedUserRole != UserRole.admin || targetCount <= 0) {
+      for (final controller in _memberNameControllers) {
+        controller.dispose();
+      }
+      _memberNameControllers.clear();
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
+
+    if (_memberNameControllers.length < targetCount) {
+      final toAdd = targetCount - _memberNameControllers.length;
+      for (int i = 0; i < toAdd; i++) {
+        _memberNameControllers.add(TextEditingController());
+      }
+    } else if (_memberNameControllers.length > targetCount) {
+      final toRemove = _memberNameControllers.length - targetCount;
+      for (int i = 0; i < toRemove; i++) {
+        final controller = _memberNameControllers.removeLast();
+        controller.dispose();
+      }
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  List<String>? _validateAdminMemberNames() {
+    if (_selectedUserRole != UserRole.admin) {
+      return [];
+    }
+
+    final names = _memberNameControllers.map((c) => c.text.trim()).toList();
+    if (names.any((name) => name.isEmpty)) {
+      return null;
+    }
+
+    final lowerSet = <String>{};
+    for (final name in names) {
+      final normalized = name.toLowerCase();
+      if (lowerSet.contains(normalized)) {
+        return null;
+      }
+      lowerSet.add(normalized);
+    }
+
+    return names;
   }
 
   Future<void> _selectDate() async {
@@ -83,6 +153,16 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
 
   Future<void> _saveHui() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final memberNames = _validateAdminMemberNames();
+    if (_selectedUserRole == UserRole.admin && memberNames == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tên người tham gia phải đủ và không được trùng trong cùng dây hụi'),
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -109,6 +189,10 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
       if (widget.huiId == null) {
         // Create new hui
         final huiId = await huiRepo.createHuiGroup(huiModel);
+
+        if (_selectedUserRole == UserRole.admin && memberNames != null) {
+          await huiRepo.replaceMembers(huiId, memberNames);
+        }
         
         // Generate contributions
         final huiWithId = huiModel.copyWith(id: huiId);
@@ -127,6 +211,10 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
       } else {
         // Update existing hui
         await huiRepo.updateHuiGroup(huiModel);
+
+        if (_selectedUserRole == UserRole.admin && memberNames != null) {
+          await huiRepo.replaceMembers(widget.huiId!, memberNames);
+        }
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -215,6 +303,7 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
                   setState(() {
                     _selectedUserRole = value;
                   });
+                  _syncMemberControllersWithCount();
                 }
               },
             ),
@@ -239,7 +328,38 @@ class _HuiFormScreenState extends ConsumerState<HuiFormScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               validator: (value) => Validators.validateInteger(value, 'Số thành viên'),
+              onChanged: (_) => _syncMemberControllersWithCount(),
             ),
+            if (_selectedUserRole == UserRole.admin && _memberNameControllers.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Tên người tham gia',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Mỗi tên phải khác nhau trong cùng dây hụi',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...List.generate(_memberNameControllers.length, (index) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextFormField(
+                    controller: _memberNameControllers[index],
+                    decoration: InputDecoration(
+                      labelText: 'Người ${index + 1}',
+                      hintText: 'Nhập tên người tham gia',
+                    ),
+                    textInputAction: TextInputAction.next,
+                  ),
+                );
+              }),
+            ],
             const SizedBox(height: 16),
             TextFormField(
               controller: _contributionAmountController,
